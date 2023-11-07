@@ -17,4 +17,10 @@ Checkout the other .md files for some instructions.
    - If you get a react-scripts not found error, that means your npm isn't updated or you did not run npm install. 
    it should open at localhost:3000
 
-Note : This UI is intended to be run for demo purposes only.
+### To run using Docker
+```bash
+docker build -t demo-ui .
+docker run -it -p 3000:3000 -p 3001:3001 -e OPENAI_API_KEY=$OPENAI_API_KEY demo-ui
+```
+
+### Note : This UI is intended to be run for demo purposes only.
