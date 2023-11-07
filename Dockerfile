@@ -1,6 +1,6 @@
 FROM nikolaik/python-nodejs:python3.11-nodejs20
 
-COPY aryn-ga /home/pn/js-ui
+COPY ui /home/pn/js-ui
 COPY openai-proxy /home/pn/py-proxy
 COPY run-ui.sh /home/pn
 
