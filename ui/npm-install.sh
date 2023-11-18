@@ -15,8 +15,8 @@ fi
 
 npm cache clean --force
 
-# TODO: ERIC - figure out the right fix for this issue.  Fails in viewPdf at ~50% on firefox/ubuntu
-# ~10% on chromium/ubuntu
+# TODO: https://github.com/aryn-ai/demo-ui/issues/9 - figure out proper fix for worker was terminated.
 patch -p0 <pdf.worker.js.patch || exit 1
-# it's wrong once we patch and very confusing in the browser debuggers
+# map file is wrong once we patch and very confusing in the browser debuggers which shows the
+# map file not the actual code.
 rm node_modules/pdfjs-dist/build/pdf.worker.js.map
