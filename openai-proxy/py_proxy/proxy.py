@@ -140,6 +140,7 @@ def proxy_opensearch(os_path):
 @app.route('/viewPdf', methods=['GET', 'OPTIONS'])
 @app.route('/favicon.ico', methods=['GET', 'OPTIONS'])
 @app.route('/logo_only.png', methods=['GET', 'OPTIONS'])
+@app.route('/ArynDemoLogo.png', methods=['GET', 'OPTIONS'])
 def proxy_ui():
     if request.method == 'OPTIONS':
         return optionsResp('GET')
