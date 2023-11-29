@@ -13,7 +13,9 @@ import io
 import logging
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from http://localhost:3000 to any route
+PORT=3000
+
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from http://localhost:3001 to any route
 
 # Replace this with your actual OpenAI API key
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
@@ -25,7 +27,7 @@ OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST", "localhost")
 OPENSEARCH_URL = f"http://{OPENSEARCH_HOST}:9200/"
 
 UI_HOST = os.environ.get("LOAD_BALANCER", "localhost")
-UI_BASE = f"http://{UI_HOST}:3000"
+UI_BASE = f"http://{UI_HOST}:3001"
 
 badHeaders = [
     'content-encoding',
@@ -161,7 +163,7 @@ def proxy_ui():
 
 
 if __name__ == '__main__':
-    print("Serving...")
+    print(f"Serving on {PORT}...")
     # Use gevent WSGIServer for asynchronous behavior
-    http_server = WSGIServer(('0.0.0.0', 3001), app)
+    http_server = WSGIServer(('0.0.0.0', PORT), app)
     http_server.serve_forever()
