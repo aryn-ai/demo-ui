@@ -12,7 +12,7 @@ from werkzeug.datastructures import Headers
 import io
 import logging
 
-app = Flask(__name__)
+app = Flask('proxy', static_folder=None)
 PORT=3000
 
 CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from http://localhost:3001 to any route
@@ -138,12 +138,12 @@ def proxy_opensearch(os_path):
 
 @app.route('/', methods=['GET', 'OPTIONS'])
 @app.route('/manifest.json', methods=['GET', 'OPTIONS'])
-@app.route('/static/js/bundle.js', methods=['GET', 'OPTIONS'])
+@app.route('/static/<path:arg>', methods=['GET', 'OPTIONS'])
 @app.route('/viewPdf', methods=['GET', 'OPTIONS'])
 @app.route('/favicon.ico', methods=['GET', 'OPTIONS'])
-@app.route('/logo_only.png', methods=['GET', 'OPTIONS'])
-@app.route('/ArynDemoLogo.png', methods=['GET', 'OPTIONS'])
-def proxy_ui():
+@app.route('/<arg>.png', methods=['GET', 'OPTIONS'])
+@app.route('/robots.txt', methods=['GET', 'OPTIONS'])
+def proxy_ui(arg=None):
     if request.method == 'OPTIONS':
         return optionsResp('GET')
 
@@ -163,7 +163,7 @@ def proxy_ui():
 
 
 if __name__ == '__main__':
-    print(f"Serving on {PORT}...")
     # Use gevent WSGIServer for asynchronous behavior
     http_server = WSGIServer(('0.0.0.0', PORT), app)
+    print(f"Serving on {PORT}...")
     http_server.serve_forever()
