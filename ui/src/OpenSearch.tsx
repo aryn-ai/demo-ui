@@ -27,7 +27,14 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, i
                 ]
             }
         },
-        "size": 20
+        "size": 20,
+        "ext": {
+            "rerank": {
+                "query_context": {
+                    "query_text": rephrasedQuestion
+                }
+            }
+        }
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
     return openSearchCall(query, url)
@@ -63,6 +70,11 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
                 "conversation_id": conversationId,
                 "context_size": numDocs,
                 "llm_model": llmModel,
+            },
+            "rerank": {
+                "query_context": {
+                    "query_text": rephrasedQuestion
+                }
             }
         },
         "size": 20
@@ -99,21 +111,21 @@ export const createConversation = async (conversationId: string) => {
     const body = {
         "name": conversationId
     }
-    const url = "/opensearch/_plugins/_ml/memory/conversation"
+    const url = "/opensearch/_plugins/_ml/memory/conversation/_create"
     return openSearchCall(body, url)
 }
 export const getInteractions = async (conversationId: any) => {
-    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversationId
+    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversationId + "/_list"
     return openSearchNoBodyCall(url)
 }
 export const getConversations = () => {
-    const url = "/opensearch/_plugins/_ml/memory/conversation/"
+    const url = "/opensearch/_plugins/_ml/memory/conversation/_list"
     return openSearchNoBodyCall(url)
 }
 export const deleteConversation = async (conversation_id: string) => {
     // hack for empty conversation delete:
     console.log("Going to delete", conversation_id)
-    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversation_id
+    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversation_id + "/_delete"
 
     const body = {
         input: "",
