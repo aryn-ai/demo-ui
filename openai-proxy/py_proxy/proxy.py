@@ -11,7 +11,7 @@ from flask_cors import CORS
 from werkzeug.datastructures import Headers
 import io
 import logging
-
+import boto3 
 app = Flask('proxy', static_folder=None)
 PORT=3000
 
@@ -100,6 +100,15 @@ def proxy():
     url = request.json.get('url')
     if url.startswith('/'):
         source = url
+    elif url.startswith("s3://"):
+        trimmed_uri = url.replace('s3://', '')
+        # Split by '/' to separate bucket name and file key
+        split_parts = trimmed_uri.split('/')
+        bucket_name = split_parts[0]
+        file_key = '/'.join(split_parts[1:])
+        s3 = boto3.client('s3', 'us-east-1')
+        response = s3.get_object(Bucket=bucket_name, Key=file_key)
+        source = response['Body']
     else:
         response = requests.get(url=url)
         source = io.BytesIO(response.content)
