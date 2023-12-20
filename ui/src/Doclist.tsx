@@ -1,5 +1,5 @@
 import React, { } from 'react';
-import { ActionIcon, Card, Container, Flex, Group, LoadingOverlay, NavLink, ScrollArea, Stack, Text, Title, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Card, Container, Flex, Group, LoadingOverlay, NavLink, Badge, ScrollArea, Stack, Text, Title, useMantineTheme } from '@mantine/core';
 import { useHover } from '@mantine/hooks';
 import { IconFileTypeHtml, IconLink, IconFileTypePdf } from '@tabler/icons-react';
 import { SearchResultDocument, Settings } from './Types';
@@ -11,6 +11,7 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
     const openDocument = () => {
         if (document.isPdf()) {
             const dataString = JSON.stringify(document);
+            console.log("You clicked: ", document)
             localStorage.setItem('pdfDocumentMetadata', dataString);
             window.open('/viewPdf');
         } else {
@@ -37,9 +38,14 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
     return (
         <div ref={ref}>
             <Card ml={theme.spacing.xl} maw="calc(100vw - 60rem);" sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank">
-                <Group position="left" mb="0" >
+                <Group p="left" mb="0" >
                     <Title order={5} mb="0" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>{document.index}. {document.title}</Title>
                     {icon()}
+                </Group>
+                <Group mb="sm" p="0">
+                    <Badge size="xs" variant="filled">{document.properties["entity"]["location"]}</Badge>
+                    <Badge size="xs" variant="filled" color="pink">{document.properties["entity"]["aircraftType"]}</Badge>
+                    <Badge size="xs" variant="filled" color="teal">{document.properties["entity"]["dateAndTime"]}</Badge>
                 </Group>
                 <Group mb="sm">
                     <Text size="xs" color="gray.7">Relevance score: {document.relevanceScore}</Text>

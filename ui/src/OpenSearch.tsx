@@ -2,17 +2,37 @@ const SOURCES = ["type", "_id", "doc_id", "properties", "title", "text_represent
 // const SEARCH_PIPELINE = "ga-demo-pipeline-hybrid"
 const SEARCH_PIPELINE = "hybrid_rag_pipeline"
 const NO_RAG_SEARCH_PIPELINE = "hybrid_pipeline"
+// const SEARCH_PIPELINE = "default-rag"
+// const NO_RAG_SEARCH_PIPELINE = "default"
 
-export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, index_name: string, model_id: string) => {
-    const query =
+export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+    let query =
     {
         "_source": SOURCES,
         "query": {
             "hybrid": {
                 "queries": [
                     {
-                        "match": {
-                            "text_representation": rephrasedQuestion
+                        "bool": {
+                            "must": [
+                                {
+                                    "exists": {
+                                        "field": "text_representation"
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "text": {
+                                            "value": rephrasedQuestion,
+                                            "boost": 1
+                                        }
+                                    }
+                                }
+                            ],
+                            "filter": [
+                                {
+                                    "match_all": {}
+                                }]
                         }
                     },
                     {
@@ -20,7 +40,11 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, i
                             "embedding": {
                                 "query_text": rephrasedQuestion,
                                 "k": 100,
-                                "model_id": model_id
+                                "model_id": model_id,
+                                "filter":
+                                {
+                                    "match_all": {}
+                                }
                             }
                         }
                     }
@@ -29,11 +53,19 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, i
         },
         "size": 20
     }
+    if (filters != null) {
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
+            query.query.hybrid.queries[0].bool.filter = filters
+        }
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
+            query.query.hybrid.queries[1].neural.embedding.filter = filters
+        }
+    }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
     return openSearchCall(query, url)
 }
 
-export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
+export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
     const query =
     {
         "_source": SOURCES,
@@ -41,8 +73,27 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
             "hybrid": {
                 "queries": [
                     {
-                        "match": {
-                            "text_representation": rephrasedQuestion
+                        "bool": {
+                            "must": [
+                                {
+                                    "exists": {
+                                        "field": "text_representation"
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "text": {
+                                            "value": rephrasedQuestion,
+                                            "boost": 1
+                                        }
+                                    }
+                                }
+                            ],
+                            "filter": [
+                                {
+                                    "match_all": {}
+                                }
+                            ]
                         }
                     },
                     {
@@ -50,7 +101,11 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
                             "embedding": {
                                 "query_text": rephrasedQuestion,
                                 "k": 100,
-                                "model_id": embeddingModel
+                                "model_id": embeddingModel,
+                                "filter":
+                                {
+                                    "match_all": {}
+                                }
                             }
                         }
                     }
@@ -67,6 +122,20 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
         },
         "size": 20
     }
+    if (filters != null) {
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
+            query.query.hybrid.queries[0].bool.filter = filters
+        } else {
+            console.log("Filters 1 were undefined")
+        }
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
+            query.query.hybrid.queries[1].neural.embedding.filter = filters
+        } else {
+            console.log("Filters 2 were undefined")
+        }
+    } else {
+        console.log("Filters were null")
+    }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
     return openSearchCall(query, url)
 }
@@ -76,21 +145,21 @@ export const getIndices = async () => {
 }
 export const getEmbeddingModels = async () => {
     const body = {
-      "query": {
-        "bool": {
-          "must_not": {
-            "range": {
-              "chunk_number": {
-                "gte": 0
-              } 
-            } 
-          },
-          "must": [
-            { "term": {"algorithm": "TEXT_EMBEDDING"}},
-            { "term": {"model_state": "DEPLOYED"}}
-          ]
+        "query": {
+            "bool": {
+                "must_not": {
+                    "range": {
+                        "chunk_number": {
+                            "gte": 0
+                        }
+                    }
+                },
+                "must": [
+                    { "term": { "algorithm": "TEXT_EMBEDDING" } },
+                    { "term": { "model_state": "DEPLOYED" } }
+                ]
+            }
         }
-      }
     }
     const url = "/opensearch/_plugins/_ml/models/_search"
     return openSearchCall(body, url)

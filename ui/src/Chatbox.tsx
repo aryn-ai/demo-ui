@@ -1,8 +1,8 @@
 import React, { FormEventHandler, useEffect } from 'react';
 import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
-import { ActionIcon, Anchor, Button, Card, Center, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
-import { IconSearch, IconChevronRight, IconRefresh, IconLink, IconFileTypeHtml, IconFileTypePdf } from '@tabler/icons-react';
-import { getAnswer, rephraseQuestion } from './Llm';
+import { ActionIcon, Anchor, Badge, Button, Card, Center, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
+import { IconSearch, IconChevronRight, IconRefresh, IconInfoSmall, IconLink, IconFileTypeHtml, IconFileTypePdf } from '@tabler/icons-react';
+import { getFilters, rephraseQuestion } from './Llm';
 import { SearchResultDocument, Settings, SystemChat, UserChat } from './Types';
 import { hybridConversationSearch, hybridConversationSearchNoRag, queryOpenSearch } from './OpenSearch';
 
@@ -85,6 +85,17 @@ const SystemChatBox = ({ systemChat }: { systemChat: SystemChat }) => {
         elements.push(text.slice(lastIndex));
         return elements;
     };
+    const filters = () => {
+        const parsed = JSON.parse(systemChat.filterContent);
+        return (
+            <Container>
+                {parsed["location"] !== "unknown" && (<Badge size="xs" variant="filled" mr="xs">{parsed["location"]}</Badge>)}
+                {parsed["airplane_name"] !== "unknown" && (<Badge size="xs" variant="filled" color="pink" mr="xs">{parsed["airplane_name"]}</Badge>)}
+                {parsed["date_start"] !== "unknown" && (<Badge size="xs" variant="filled" color="teal" mr="xs">{parsed["date_start"] + ' <= day'}</Badge>)}
+                {parsed["date_end"] !== "unknown" && (<Badge size="xs" variant="filled" color="teal" mr="xs">{'day <= ' + parsed["date_end"]}</Badge>)}
+            </Container>
+        )
+    }
     // setTextNodes(replaceCitationsWithLinks(systemChat.response))
     return (
         <Card key={systemChat.id} ml={theme.spacing.xl} padding="lg" radius="md" bg="blue.0">
@@ -106,6 +117,9 @@ const SystemChatBox = ({ systemChat }: { systemChat: SystemChat }) => {
             <Text fz="xs" fs="italic" color="dimmed" align='right'>
                 Interaction id: {systemChat.interaction_id ? systemChat.interaction_id : "[todo]"}
             </Text>
+            {systemChat.filterContent ?
+                filters()
+                : null}
         </Card >
     );
 }
@@ -127,6 +141,75 @@ const UserChatBox = ({ id, interaction_id, query, rephrasedQuery }: UserChat) =>
             </Text>
         </Card>
     );
+}
+function parseFilters(filterResponse: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
+    if ((filterResponse.error !== undefined) &&
+        (filterResponse.error.type === 'timeout_exception')) {
+        const documents = new Array<SearchResultDocument>()
+        const chatResponse = "Timeout from OpenAI"
+        const interactionId = ""
+        setErrorMessage(chatResponse)
+        return null
+    }
+    console.log("Parsing raw filters", filterResponse)
+    try {
+        let found = false
+        const parsedObject = JSON.parse(filterResponse);
+        // location\n \
+        // 2. airplane_name\n \
+        // 3. date_start in yyyy - mm - dd\n \
+        // 4. date_end in yyyy - mm - dd\n
+        let result: any = {
+            "bool": {
+                "filter": []
+            }
+        }
+        // location
+        if (parsedObject["location"] != null && parsedObject["location"] !== "unknown") {
+            result["bool"]["filter"].push({
+                "match": {
+                    "properties.entity.location": parsedObject["location"]
+                }
+            })
+            found = true
+        }
+        // aircraftType
+        if (parsedObject["airplane_name"] != null && parsedObject["airplane_name"] !== "unknown") {
+            result["bool"]["filter"].push({
+                "match": {
+                    "properties.entity.aircraftType": parsedObject["airplane_name"]
+                }
+            })
+            found = true
+        }
+
+        // dateTime
+
+        let range_query: any = {
+            "range": {
+                "properties.entity.day": {
+                }
+            }
+        }
+        if (parsedObject["date_start"] != null && parsedObject["date_start"] !== "unknown") {
+            range_query.range["properties.entity.day"].gte = parsedObject["date_start"]
+        }
+        if (parsedObject["date_end"] != null && parsedObject["date_end"] !== "unknown") {
+            range_query.range["properties.entity.day"].lte = parsedObject["date_end"]
+        }
+        if (range_query.range["properties.entity.day"].gte !== undefined
+            || range_query.range["properties.entity.day"].lte !== undefined) {
+            result.bool.filter.push(range_query)
+            found = true
+        }
+        console.log("Result filters are: ", result)
+        if (found) {
+            return result
+        } else return null
+    } catch (error) {
+        console.error('Error parsing JSON:', error);
+    }
+    return null
 }
 
 function parseOpenSearchResults(openSearchResponse: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
@@ -214,57 +297,67 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             // console.log("history: ", chatHistoryText)
             setLoadingMessage("Rephrasing question with conversation context");
             const rephraseQuestionResponse = await rephraseQuestion(chatInput, chatHistoryInteractions, settings.modelName)
+            const filterResponse = await getFilters(chatInput, settings.modelName)
+            console.log(filterResponse)
             if (rephraseQuestionResponse.ok) {
                 const responseData = await rephraseQuestionResponse.json();
                 const rephrasedQuestion = responseData.choices[0].message.content;
                 console.log("Rephrased question to ", rephrasedQuestion)
                 setLoadingMessage("Querying knowledge database with rephrased question: \"" + rephrasedQuestion + "\"");
+                if (filterResponse.ok) {
+                    const filterData = await filterResponse.json();
+                    const filterContent = filterData.choices[0].message.content
+                    const filters = parseFilters(filterContent, setErrorMessage)
+                    console.log("Filters are:", JSON.stringify(filters))
+                    setLoadingMessage("Using filter: \"" + JSON.stringify(filters) + "\"");
 
-                const populateChatFromOs = (openSearchResults: any) => {
-                    console.log("Main processor ", openSearchResults)
-                    console.log("Main processor: OS results ", openSearchResults)
-                    const endTime = new Date(Date.now());
-                    const elpased = endTime.getTime() - startTime.getTime()
-                    console.log("Main processor: OS took seconds: ", elpased)
-                    const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
-                    // todo: replace these with interaction id
-                    const newChat = new UserChat({
-                        id: parsedOpenSearchResults.interactionId + "_user",
-                        interaction_id: parsedOpenSearchResults.interactionId,
-                        query: chatInput,
-                        rephrasedQuery: rephrasedQuestion
-                    });
-                    const newSystemChat = new SystemChat(
-                        {
-                            id: parsedOpenSearchResults.interactionId + "_system",
+                    const populateChatFromOs = (openSearchResults: any) => {
+                        console.log("Main processor ", openSearchResults)
+                        console.log("Main processor: OS results ", openSearchResults)
+                        const endTime = new Date(Date.now());
+                        const elpased = endTime.getTime() - startTime.getTime()
+                        console.log("Main processor: OS took seconds: ", elpased)
+                        const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
+                        // todo: replace these with interaction id
+                        const newChat = new UserChat({
+                            id: parsedOpenSearchResults.interactionId + "_user",
                             interaction_id: parsedOpenSearchResults.interactionId,
-                            response: parsedOpenSearchResults.chatResponse,
-                            ragPassageCount: settings.ragPassageCount,
-                            modelName: settings.modelName,
-                            queryUsed: rephrasedQuestion,
-                            hits: parsedOpenSearchResults.documents
+                            query: chatInput,
+                            rephrasedQuery: rephrasedQuestion
                         });
-                    setChatHistory([newSystemChat, newChat, ...chatHistory,]);
-                }
-                const populateDocsFromOs = (openSearchResults: any) => {
-                    console.log("Info separate processor ", openSearchResults)
-                    console.log("Info separate processor : OS results ", openSearchResults)
-                    const endTime = new Date(Date.now());
-                    const elpased = endTime.getTime() - startTime.getTime()
-                    console.log("Info separate processor : OS took seconds: ", elpased)
-                    const parsedOpenSearchResults = parseOpenSearchResultsOg(openSearchResults)
-                    setSearchResults(parsedOpenSearchResults)
-                    console.log("Info separate processor : set docs in independent thread to: ", parsedOpenSearchResults)
-                    setDocsLoading(false)
-                }
+                        const newSystemChat = new SystemChat(
+                            {
+                                id: parsedOpenSearchResults.interactionId + "_system",
+                                interaction_id: parsedOpenSearchResults.interactionId,
+                                response: parsedOpenSearchResults.chatResponse,
+                                ragPassageCount: settings.ragPassageCount,
+                                modelName: settings.modelName,
+                                queryUsed: rephrasedQuestion,
+                                hits: parsedOpenSearchResults.documents,
+                                filterContent: filterContent
+                            });
+                        setChatHistory([newSystemChat, newChat, ...chatHistory,]);
+                    }
+                    const populateDocsFromOs = (openSearchResults: any) => {
+                        console.log("Info separate processor ", openSearchResults)
+                        console.log("Info separate processor : OS results ", openSearchResults)
+                        const endTime = new Date(Date.now());
+                        const elpased = endTime.getTime() - startTime.getTime()
+                        console.log("Info separate processor : OS took seconds: ", elpased)
+                        const parsedOpenSearchResults = parseOpenSearchResultsOg(openSearchResults)
+                        setSearchResults(parsedOpenSearchResults)
+                        console.log("Info separate processor : set docs in independent thread to: ", parsedOpenSearchResults)
+                        setDocsLoading(false)
+                    }
 
 
-                const startTime = new Date(Date.now());
-                // const openSearchResults = await hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.modelName, settings.ragPassageCount);
-                await Promise.all([
-                    hybridConversationSearchNoRag(rephrasedQuestion, settings.openSearchIndex, settings.embeddingModel).then(populateDocsFromOs),
-                    hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount).then(populateChatFromOs),
-                ]);
+                    const startTime = new Date(Date.now());
+                    // const openSearchResults = await hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.modelName, settings.ragPassageCount);
+                    await Promise.all([
+                        hybridConversationSearchNoRag(rephrasedQuestion, filters, settings.openSearchIndex, settings.embeddingModel).then(populateDocsFromOs),
+                        hybridConversationSearch(chatInput, rephrasedQuestion, filters, settings.activeConversation, settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount).then(populateChatFromOs),
+                    ]);
+                }
 
             } else {
                 console.error('Error calling the API:', rephraseQuestionResponse.statusText);

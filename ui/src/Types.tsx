@@ -14,10 +14,10 @@ export class SearchResultDocument {
 
     isPdf() {
         if (this.properties.filetype === "application/pdf") {
-          return true;
+            return true;
         }
         if (this.url.endsWith(".pdf")) { // legacy test
-          return true;
+            return true;
         }
         return false;
     }
@@ -40,6 +40,7 @@ export class SystemChat {
     response: string = "";
     hits: SearchResultDocument[] = new Array();
     queryUsed: string | null = "";
+    filterContent: any;
 
     public constructor(init?: Partial<SystemChat>) {
         Object.assign(this, init);
