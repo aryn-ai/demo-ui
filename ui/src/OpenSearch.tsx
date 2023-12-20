@@ -4,16 +4,31 @@ const SEARCH_PIPELINE = "hybrid_rag_pipeline"
 const NO_RAG_SEARCH_PIPELINE = "hybrid_pipeline"
 export const FEEDBACK_INDEX_NAME = "feedback"
 
-export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, index_name: string, model_id: string) => {
-    const query =
+export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+    let query =
     {
         "_source": SOURCES,
         "query": {
             "hybrid": {
                 "queries": [
                     {
-                        "match": {
-                            "text_representation": rephrasedQuestion
+                        "bool": {
+                            "must": [
+                                {
+                                    "exists": {
+                                        "field": "text_representation"
+                                    }
+                                },
+                                {
+                                    "match": {
+                                        "text_representation": rephrasedQuestion
+                                    }
+                                }
+                            ],
+                            "filter": [
+                                {
+                                    "match_all": {}
+                                }]
                         }
                     },
                     {
@@ -21,7 +36,11 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, i
                             "embedding": {
                                 "query_text": rephrasedQuestion,
                                 "k": 100,
-                                "model_id": model_id
+                                "model_id": model_id,
+                                "filter":
+                                {
+                                    "match_all": {}
+                                }
                             }
                         }
                     }
@@ -37,11 +56,19 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, i
             }
         }
     }
+    if (filters != null) {
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
+            query.query.hybrid.queries[0].bool.filter = filters
+        }
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
+            query.query.hybrid.queries[1].neural.embedding.filter = filters
+        }
+    }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
     return openSearchCall(query, url)
 }
 
-export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
+export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
     const query =
     {
         "_source": SOURCES,
@@ -49,8 +76,27 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
             "hybrid": {
                 "queries": [
                     {
-                        "match": {
-                            "text_representation": rephrasedQuestion
+                        "bool": {
+                            "must": [
+                                {
+                                    "exists": {
+                                        "field": "text_representation"
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "text": {
+                                            "value": rephrasedQuestion,
+                                            "boost": 1
+                                        }
+                                    }
+                                }
+                            ],
+                            "filter": [
+                                {
+                                    "match_all": {}
+                                }
+                            ]
                         }
                     },
                     {
@@ -58,7 +104,11 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
                             "embedding": {
                                 "query_text": rephrasedQuestion,
                                 "k": 100,
-                                "model_id": embeddingModel
+                                "model_id": embeddingModel,
+                                "filter":
+                                {
+                                    "match_all": {}
+                                }
                             }
                         }
                     }
@@ -80,30 +130,55 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
         },
         "size": 20
     }
+    if (filters != null) {
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
+            query.query.hybrid.queries[0].bool.filter = filters
+        } else {
+            console.log("Filters 1 were undefined")
+        }
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
+            query.query.hybrid.queries[1].neural.embedding.filter = filters
+        } else {
+            console.log("Filters 2 were undefined")
+        }
+    } else {
+        console.log("Filters were null")
+    }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
+
     return openSearchCall(query, url)
 }
+
+export const updateInteractionAnswer = async (interactionId: any, answer: string) => {
+    console.log("Updating interaction with new answer", interactionId)
+    const url = "/opensearch/_plugins/_ml/memory/interaction/" + interactionId + "/_update"
+    const data = {
+        "response": answer
+    }
+    return openSearchCall(data, url, "PUT")
+}
+
 export const getIndices = async () => {
     const url = "/opensearch/_aliases?pretty"
     return openSearchNoBodyCall(url)
 }
 export const getEmbeddingModels = async () => {
     const body = {
-      "query": {
-        "bool": {
-          "must_not": {
-            "range": {
-              "chunk_number": {
-                "gte": 0
-              } 
-            } 
-          },
-          "must": [
-            { "term": {"algorithm": "TEXT_EMBEDDING"}},
-            { "term": {"model_state": "DEPLOYED"}}
-          ]
+        "query": {
+            "bool": {
+                "must_not": {
+                    "range": {
+                        "chunk_number": {
+                            "gte": 0
+                        }
+                    }
+                },
+                "must": [
+                    { "term": { "algorithm": "TEXT_EMBEDDING" } },
+                    { "term": { "model_state": "DEPLOYED" } }
+                ]
+            }
         }
-      }
     }
     const url = "/opensearch/_plugins/_ml/models/_search"
     return openSearchCall(body, url)
@@ -116,8 +191,20 @@ export const createConversation = async (conversationId: string) => {
     return openSearchCall(body, url)
 }
 export const getInteractions = async (conversationId: any) => {
-    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversationId + "/_list"
-    return openSearchNoBodyCall(url)
+    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversationId + "/_search"
+    const body = {
+        "query": {
+            "match_all": {}
+        },
+        "sort": [
+            {
+                "create_time": {
+                    "order": "DESC"
+                }
+            }
+        ]
+    }
+    return openSearchCall(body, url)
 }
 export const getConversations = () => {
     const url = "/opensearch/_plugins/_ml/memory/conversation/_list"
@@ -240,10 +327,10 @@ export const createFeedbackIndex = async () => {
                 },
                 "thumb": {
                     "type": "keyword"
-                }, 
+                },
                 "conversation_id": {
                     "type": "keyword"
-                }, 
+                },
                 "comment": {
                     "type": "text"
                 }
@@ -256,7 +343,7 @@ export const createFeedbackIndex = async () => {
 export const updateFeedback = async (conversationId: string, interactionId: string, thumb: boolean | null, comment: string | null) => {
     var feedbackDoc;
     console.log(thumb);
-    if(comment !== "") {
+    if (comment !== "") {
         feedbackDoc = {
             "doc": {
                 "interaction_id": interactionId,

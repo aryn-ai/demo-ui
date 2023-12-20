@@ -48,13 +48,15 @@ export default function App() {
         // const interactionsData = await interactionsResponse.json();
         const interactionsData = await interactionsResponse;
         console.info("interactionsData: ", interactionsData)
-        const previousInteractionsUnFlattened = await Promise.all(interactionsData.interactions.map(async (interaction: any) => {
-          const feedback = await getFeedback(interaction.interaction_id)
+        const previousInteractionsUnFlattened = await Promise.all(interactionsData.hits.hits.map(async (interaction_raw: any) => {
+          const interaction = interaction_raw._source
+          const interaction_id = interaction_raw._id
+          const feedback = await getFeedback(interaction_id)
           const systemChat = new SystemChat(
             {
-              id: interaction.interaction_id + "_response",
+              id: interaction_id + "_response",
               response: interaction.response,
-              interaction_id: interaction.interaction_id,
+              interaction_id: interaction_id,
               // ragPassageCount: null,
               modelName: null,
               queryUsed: null,
@@ -63,9 +65,9 @@ export default function App() {
             });
           const userChat = new UserChat(
             {
-              id: interaction.interaction_id + "_user",
+              id: interaction_id + "_user",
               query: interaction.input,
-              interaction_id: interaction.interaction_id,
+              interaction_id: interaction_id,
               rephrasedQuery: null
             });
           return [systemChat, userChat];
