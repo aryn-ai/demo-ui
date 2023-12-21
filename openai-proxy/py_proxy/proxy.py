@@ -29,6 +29,9 @@ OPENSEARCH_URL = f"http://{OPENSEARCH_HOST}:9200/"
 UI_HOST = os.environ.get("LOAD_BALANCER", "localhost")
 UI_BASE = f"http://{UI_HOST}:3001"
 
+# AWS defaults
+AWS_REGION = "us-east-1"
+
 badHeaders = [
     'content-encoding',
     'content-length',
@@ -101,12 +104,9 @@ def proxy():
     if url.startswith('/'):
         source = url
     elif url.startswith("s3://"):
-        trimmed_uri = url.replace('s3://', '')
-        # Split by '/' to separate bucket name and file key
-        split_parts = trimmed_uri.split('/')
-        bucket_name = split_parts[0]
-        file_key = '/'.join(split_parts[1:])
-        s3 = boto3.client('s3', 'us-east-1')
+        trimmed_uri = url[5:]
+        bucket_name, file_key = trimmed_uri.split('/', 1)
+        s3 = boto3.client('s3', AWS_REGION)
         response = s3.get_object(Bucket=bucket_name, Key=file_key)
         source = response['Body']
     else:
