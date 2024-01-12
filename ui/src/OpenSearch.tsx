@@ -2,6 +2,7 @@ const SOURCES = ["type", "_id", "doc_id", "properties", "title", "text_represent
 // const SEARCH_PIPELINE = "ga-demo-pipeline-hybrid"
 const SEARCH_PIPELINE = "hybrid_rag_pipeline"
 const NO_RAG_SEARCH_PIPELINE = "hybrid_pipeline"
+export const FEEDBACK_INDEX_NAME = "feedback"
 
 export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, index_name: string, model_id: string) => {
     const query =
@@ -228,4 +229,58 @@ export async function queryOpenSearch(question: string, index_name: string, mode
     console.log("OS query ", JSON.stringify(query))
     var response = sendQuery(query, index_name);
     return response;
+}
+
+export const createFeedbackIndex = async () => {
+    const indexMappings = {
+        "mappings": {
+            "properties": {
+                "interaction_id": {
+                    "type": "keyword"
+                },
+                "thumb": {
+                    "type": "keyword"
+                }, 
+                "conversation_id": {
+                    "type": "keyword"
+                }, 
+                "comment": {
+                    "type": "text"
+                }
+            }
+        }
+    }
+    openSearchCall(indexMappings, "/opensearch/" + FEEDBACK_INDEX_NAME, "PUT")
+}
+
+export const updateFeedback = async (conversationId: string, interactionId: string, thumb: boolean | null, comment: string | null) => {
+    var feedbackDoc;
+    console.log(thumb);
+    if(comment !== "") {
+        feedbackDoc = {
+            "doc": {
+                "interaction_id": interactionId,
+                "conversation_id": conversationId,
+                "thumb": (thumb === null ? "null" : (thumb ? "up" : "down")),
+                "comment": comment
+            },
+            "doc_as_upsert": true
+        }
+    } else {
+        feedbackDoc = {
+            "doc": {
+                "interaction_id": interactionId,
+                "conversation_id": conversationId,
+                "thumb": (thumb === null ? "null" : (thumb ? "up" : "down"))
+            },
+            "doc_as_upsert": true
+        }
+    }
+    const url = "/opensearch/" + FEEDBACK_INDEX_NAME + "/_update/" + interactionId
+    openSearchCall(feedbackDoc, url, "POST")
+}
+
+export const getFeedback = async (interactionId: string) => {
+    const url = "/opensearch/" + FEEDBACK_INDEX_NAME + "/_doc/" + interactionId
+    return openSearchNoBodyCall(url)
 }

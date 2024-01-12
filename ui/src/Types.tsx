@@ -40,7 +40,8 @@ export class SystemChat {
     response: string = "";
     hits: SearchResultDocument[] = new Array();
     queryUsed: string | null = "";
-
+    feedback: boolean | null = null;
+    comment: string = "";
     public constructor(init?: Partial<SystemChat>) {
         Object.assign(this, init);
     }
