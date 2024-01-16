@@ -1,10 +1,11 @@
 import React, { FormEventHandler, useEffect } from 'react';
 import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
 import { ActionIcon, Anchor, Button, Card, Center, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
-import { IconSearch, IconChevronRight, IconRefresh, IconLink, IconFileTypeHtml, IconFileTypePdf } from '@tabler/icons-react';
+import { IconSearch, IconChevronRight, IconRefresh, IconLink, IconFileTypeHtml, IconFileTypePdf, IconThumbUpOff, IconThumbDownOff } from '@tabler/icons-react';
+import { IconThumbUp, IconThumbUpFilled, IconThumbDown, IconThumbDownFilled } from '@tabler/icons-react';
 import { getAnswer, rephraseQuestion } from './Llm';
 import { SearchResultDocument, Settings, SystemChat, UserChat } from './Types';
-import { hybridConversationSearch, hybridConversationSearchNoRag, queryOpenSearch } from './OpenSearch';
+import { hybridConversationSearch, hybridConversationSearchNoRag, queryOpenSearch, updateFeedback } from './OpenSearch';
 
 const Citation = ({ document, citationNumber }: { document: SearchResultDocument, citationNumber: number }) => {
     const [doc, setDoc] = useState(document)
@@ -48,6 +49,76 @@ const Citation = ({ document, citationNumber }: { document: SearchResultDocument
         </HoverCard>
     );
 }
+const FeedbackButtons = ({ systemChat, settings }: {systemChat: SystemChat, settings: Settings}) => {
+    const [thumbUpState, setThumbUp] = useState(systemChat.feedback);
+    const [comment, setComment] = useState(systemChat.comment);
+    const handleSubmit = async (thumb: boolean | null) => {
+        updateFeedback(settings.activeConversation, systemChat.interaction_id, thumb, comment)
+    };
+    const handleInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSubmit(thumbUpState);
+        }
+    };
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setComment(e.target.value);
+    };
+    return (
+        <Group position="right" spacing="xs" w="100%">
+            <TextInput
+                onKeyDown={handleInputKeyPress}
+                onChange={handleInputChange}
+                value={comment}
+                w="82%"
+                radius="sm"
+                fz="xs"
+                fs="italic"
+                color="blue"
+                variant="unstyled"
+                placeholder="Leave a comment"
+            />
+            <ActionIcon size={32} radius="xs" component="button" w="7%"
+                onClick={(event) => {
+                    if(systemChat.feedback == null || systemChat.feedback == false) {
+                        setThumbUp(true);
+                        systemChat.feedback = true;
+                        handleSubmit(true);
+                    } else if(systemChat.feedback == true) {
+                        setThumbUp(null);
+                        systemChat.feedback = null;
+                        handleSubmit(null);
+                    }
+                }}>
+                { thumbUpState == null ? 
+                    <IconThumbUp size="1rem" stroke={2} /> : 
+                    thumbUpState ?
+                        <IconThumbUpFilled size="1rem" stroke={2} /> :
+                        <IconThumbUpOff size="1rem" stroke={2} />
+                }
+            </ActionIcon>
+            <ActionIcon size={32} radius="xs" component="button" w="7%"
+                onClick={(event) => {
+                    if(systemChat.feedback == null || systemChat.feedback == true) {
+                        setThumbUp(false);
+                        systemChat.feedback = false;
+                        handleSubmit(false);
+                    } else if(systemChat.feedback == false) {
+                        setThumbUp(null);
+                        systemChat.feedback = null;
+                        handleSubmit(null);
+                    }
+                }}>
+                { thumbUpState == null ? 
+                    <IconThumbDown size="1rem" stroke={2} /> :
+                    thumbUpState ? 
+                        <IconThumbDownOff size="1rem" stroke={2} /> :
+                        <IconThumbDownFilled size="1rem" stroke={2} /> 
+                }
+            </ActionIcon>
+        </Group>
+    );
+}
 const LoadingChatBox = ({ loadingMessage }: { loadingMessage: (string | null) }) => {
     const theme = useMantineTheme();
     return (
@@ -60,7 +131,7 @@ const LoadingChatBox = ({ loadingMessage }: { loadingMessage: (string | null) })
         </Container >
     );
 }
-const SystemChatBox = ({ systemChat }: { systemChat: SystemChat }) => {
+const SystemChatBox = ({ systemChat, settings }: { systemChat: SystemChat, settings: Settings }) => {
     const citationRegex = /\[(\d+)\]/g;
     const theme = useMantineTheme();
     // const [searchResultsCopy, setSearchResultsCopy] = useState(systemChat.hits)
@@ -106,6 +177,7 @@ const SystemChatBox = ({ systemChat }: { systemChat: SystemChat }) => {
             <Text fz="xs" fs="italic" color="dimmed" align='right'>
                 Interaction id: {systemChat.interaction_id ? systemChat.interaction_id : "[todo]"}
             </Text>
+            <FeedbackButtons systemChat={systemChat} settings={settings} />
         </Card >
     );
 }
@@ -457,7 +529,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                         if ('query' in chat) {
                             return <UserChatBox key={chat.id + "_user"} id={chat.id} interaction_id={chat.interaction_id} query={chat.query} rephrasedQuery={chat.rephrasedQuery} />
                         } else {
-                            return <SystemChatBox key={chat.id + "_system"} systemChat={chat} />
+                            return <SystemChatBox key={chat.id + "_system"} systemChat={chat} settings={settings} />
                         }
                     }
                     )
@@ -467,4 +539,21 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
 
         </Flex >
     );
+}
+export const thumbToBool = (thumbValue: string) => {
+    switch(thumbValue) {
+        case "null": {
+            return null;
+        }
+        case "up": {
+            return true;
+        }
+        case "down": {
+            return false;
+        }
+        default: {
+            console.log("received unexpected feedback thumb value: " + thumbValue)
+            return null;
+        }
+    }
 }
