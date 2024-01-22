@@ -13,6 +13,8 @@ gevent = "^23.9.1"
 Flask-Cors = "^4.0.0"
 Werkzeug = "^3.0.0"
 requests = "^2.31.0"
+openai = "0.28.1"
+boto3 = "^1.28.70"
 
 
 [build-system]
