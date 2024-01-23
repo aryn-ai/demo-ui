@@ -49,8 +49,8 @@ export default function App() {
         const interactionsData = await interactionsResponse;
         console.info("interactionsData: ", interactionsData)
         const previousInteractionsUnFlattened = await Promise.all(interactionsData.hits.hits.map(async (interaction_raw: any) => {
-          const interaction = interaction_raw
-          const interaction_id = interaction_raw.message_id
+          const interaction = interaction_raw._source
+          const interaction_id = interaction_raw._id
           const feedback = await getFeedback(interaction_id)
           const systemChat = new SystemChat(
             {
