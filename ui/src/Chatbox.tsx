@@ -175,7 +175,7 @@ const SystemChatBox = ({ systemChat, settings }: { systemChat: SystemChat, setti
                     <Citation key={citationNumber} document={systemChat.hits[citationNumber - 1]} citationNumber={citationNumber} />
                 );
             } else {
-                // elements.push(substring)
+                elements.push(substring)
             };
             lastIndex = index + substring.length;
             return substring;
