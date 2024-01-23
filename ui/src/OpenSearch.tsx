@@ -151,7 +151,7 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
 
 export const updateInteractionAnswer = async (interactionId: any, answer: string) => {
     console.log("Updating interaction with new answer", interactionId)
-    const url = "/opensearch/_plugins/_ml/memory/interaction/" + interactionId + "/_update"
+    const url = "/opensearch/_plugins/_ml/memory/message/" + interactionId
     const data = {
         "response": answer
     }
@@ -187,11 +187,11 @@ export const createConversation = async (conversationId: string) => {
     const body = {
         "name": conversationId
     }
-    const url = "/opensearch/_plugins/_ml/memory/conversation/_create"
+    const url = "/opensearch/_plugins/_ml/memory/"
     return openSearchCall(body, url)
 }
 export const getInteractions = async (conversationId: any) => {
-    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversationId + "/_search"
+    const url = "/opensearch/_plugins/_ml/memory/" + conversationId + "/_search"
     const body = {
         "query": {
             "match_all": {}
@@ -207,13 +207,13 @@ export const getInteractions = async (conversationId: any) => {
     return openSearchCall(body, url)
 }
 export const getConversations = () => {
-    const url = "/opensearch/_plugins/_ml/memory/conversation/_list"
+    const url = "/opensearch/_plugins/_ml/memory/"
     return openSearchNoBodyCall(url)
 }
 export const deleteConversation = async (conversation_id: string) => {
     // hack for empty conversation delete:
     console.log("Going to delete", conversation_id)
-    const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversation_id + "/_delete"
+    const url = "/opensearch/_plugins/_ml/memory/" + conversation_id
 
     const body = {
         input: "",
@@ -221,7 +221,7 @@ export const deleteConversation = async (conversation_id: string) => {
         response: ""
     }
     console.log("Adding interaction")
-    const addCall = await openSearchCall(body, url)
+    const addCall = await openSearchCall(body + "/messages/", url)
     await addCall
 
     console.log("Now deleting")
