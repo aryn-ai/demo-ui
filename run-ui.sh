@@ -50,7 +50,7 @@ cd "${UIDIR}"
 # Running the UI this way means that the html is unminified and hence easy to read
 # Since the UI is open source, there's little downside of doing this and it helps with
 # debugging.
-PORT=3001 HTTPS=true BROWSER=none npm start | cat
+PORT=3001 WDS_SOCKET_PORT=3000 HTTPS=true BROWSER=none npm start | cat
 
 # These are the steps that would build the UI and serve it minified.  We
 # should move the build back into the Dockerfile now that we no longer need
