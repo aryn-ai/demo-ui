@@ -122,7 +122,7 @@ def proxy():
         response = s3.get_object(Bucket=bucket_name, Key=file_key)
         source = response['Body']
     else:
-        response = requests.get(url=url, Verify=False)
+        response = requests.get(url=url, verify=False)
         source = io.BytesIO(response.content)
 
     download_name = os.path.basename(url)
