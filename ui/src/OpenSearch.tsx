@@ -69,7 +69,7 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, f
 }
 
 export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
-    const query =
+    const query: any =
     {
         "_source": SOURCES,
         "query": {
@@ -146,14 +146,17 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
 
-    return openSearchCall(query, url)
+    return [openSearchCall(query, url), query]
 }
 
-export const updateInteractionAnswer = async (interactionId: any, answer: string) => {
+export const updateInteractionAnswer = async (interactionId: any, answer: string, query: any) => {
     console.log("Updating interaction with new answer", interactionId)
     const url = "/opensearch/_plugins/_ml/memory/message/" + interactionId
     const data = {
-        "response": answer
+        "response": answer,
+        "additional_info": {
+            "queryUsed": query
+        }
     }
     return openSearchCall(data, url, "PUT")
 }
@@ -341,30 +344,27 @@ export const createFeedbackIndex = async () => {
 }
 
 export const updateFeedback = async (conversationId: string, interactionId: string, thumb: boolean | null, comment: string | null) => {
-    var feedbackDoc;
     console.log(thumb);
-    if (comment !== "") {
-        feedbackDoc = {
-            "doc": {
-                "interaction_id": interactionId,
-                "conversation_id": conversationId,
-                "thumb": (thumb === null ? "null" : (thumb ? "up" : "down")),
-                "comment": comment
-            },
-            "doc_as_upsert": true
-        }
-    } else {
-        feedbackDoc = {
-            "doc": {
-                "interaction_id": interactionId,
-                "conversation_id": conversationId,
-                "thumb": (thumb === null ? "null" : (thumb ? "up" : "down"))
-            },
-            "doc_as_upsert": true
-        }
+    // get entire conversation
+    var conversationSnapshot = await getInteractions(conversationId)
+
+    let feedbackDoc: any = {
+        "doc": {
+            "interaction_id": interactionId,
+            "conversation_id": conversationId,
+            "thumb": (thumb === null ? "null" : (thumb ? "up" : "down")),
+            "conversation_snapshot": conversationSnapshot
+        },
+        "doc_as_upsert": true
     }
+    if (comment !== "") {
+        feedbackDoc["doc"]["comment"] = comment
+    }
+
     const url = "/opensearch/" + FEEDBACK_INDEX_NAME + "/_update/" + interactionId
     openSearchCall(feedbackDoc, url, "POST")
+
+
 }
 
 export const getFeedback = async (interactionId: string) => {

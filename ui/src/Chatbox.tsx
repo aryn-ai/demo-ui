@@ -448,7 +448,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             setLoadingMessage("Rephrasing question with conversation context");
             const rephraseQuestionResponse = await rephraseQuestion(chatInput, chatHistoryInteractions, settings.modelName)
             let filterResponse;
-            let filters;
+            let filters: any;
             let filterContent: any = null;
             if (settings.auto_filter) {
                 filterResponse = await getFilters(chatInput, settings.modelName)
@@ -477,15 +477,16 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                 console.log("Filters are:", JSON.stringify(filters))
                 setLoadingMessage("Using filter: \"" + JSON.stringify(filters) + "\". Generating answer..");
 
-                const clean = async (openSearchResponse: any) => {
+                const clean = async (result: any) => {
+                    const openSearchResponseAsync = result[0]
+                    const query = result[1]
+                    const openSearchResponse = await openSearchResponseAsync
+                    let generatedAnswer = openSearchResponse.ext.retrieval_augmented_generation.answer
                     if (settings.simplify) {
-                        const generatedAnswer = openSearchResponse.ext.retrieval_augmented_generation.answer
-                        const newAnswer = await simplifyAnswer(rephrasedQuestion, generatedAnswer)
-                        if (newAnswer != generatedAnswer) {
-                            await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, newAnswer)
-                        }
-                        openSearchResponse.ext.retrieval_augmented_generation.answer = newAnswer
+                        generatedAnswer = await simplifyAnswer(rephrasedQuestion, generatedAnswer)
                     }
+                    await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, generatedAnswer, query)
+                    openSearchResponse.ext.retrieval_augmented_generation.answer = generatedAnswer
                     return openSearchResponse
                 }
 
@@ -541,6 +542,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                 throw new Error('Error calling the API: ' + rephraseQuestionResponse.statusText);
             }
         } catch (e) {
+            console.log(e)
             if (typeof e === "string") {
                 setErrorMessage(e.toUpperCase())
             } else if (e instanceof Error) {
