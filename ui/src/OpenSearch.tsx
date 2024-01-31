@@ -347,24 +347,18 @@ export const updateFeedback = async (conversationId: string, interactionId: stri
     console.log(thumb);
     // get entire conversation
     var conversationSnapshot = await getInteractions(conversationId)
-
     let feedbackDoc: any = {
         "doc": {
             "interaction_id": interactionId,
             "conversation_id": conversationId,
             "thumb": (thumb === null ? "null" : (thumb ? "up" : "down")),
+            "comment": (comment === null || comment == "" ? "null" : comment),
             "conversation_snapshot": conversationSnapshot
         },
         "doc_as_upsert": true
     }
-    if (comment !== "") {
-        feedbackDoc["doc"]["comment"] = comment
-    }
-
     const url = "/opensearch/" + FEEDBACK_INDEX_NAME + "/_update/" + interactionId
     openSearchCall(feedbackDoc, url, "POST")
-
-
 }
 
 export const getFeedback = async (interactionId: string) => {

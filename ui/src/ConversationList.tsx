@@ -20,12 +20,9 @@ const useStyles = createStyles((theme) => ({
         boxSizing: 'border-box',
         display: 'block',
         textDecoration: 'none',
-        borderTopRightRadius: theme.radius.md,
-        borderBottomRightRadius: theme.radius.md,
+        borderRadius: theme.radius.md,
         color: theme.colorScheme === 'dark' ? theme.colors.dark[0] : theme.colors.gray[7],
-        // padding: `0 ${theme.spacing.md}`,
         fontSize: theme.fontSizes.sm,
-        // marginRight: theme.spacing.sm,
         fontWeight: 500,
         height: rem(44),
         lineHeight: rem(44),
@@ -54,31 +51,32 @@ export function setActiveConversation(conversationId: string, settings: Settings
 const NavBarConversationItem = ({ conversation, conversations, setConversations, selectConversation, loading, settings }: { conversation: any, conversations: any[], setConversations: any, selectConversation: any, loading: any, settings: any }) => {
     const { classes, cx } = useStyles();
     return (
-        <Group key={conversation.id + "_navbar_row"} spacing="0" id={conversation.id + "_navbar_row"} >
-            <ActionIcon w="1rem" ml="sm" mr="sm" component="button"
-                onClick={(event) => {
-                    console.log("Removing ", conversation.id)
-                    deleteConversation(conversation.id)
-                    const newConversations = conversations.filter((c) => c.id !== conversation.id);
-                    console.log("newLinks", newConversations)
-                    setConversations(newConversations);
-                }}>
-                <IconTrash size="1.125rem" />
-            </ActionIcon>
-            <Anchor
-                className={cx(classes.link, { [classes.linkActive]: conversation.id === settings.activeConversation })}
-                w="16rem"
-                pl="xs"
-                key={conversation.id}
-                onClick={(event) => {
-                    event.preventDefault();
-                    selectConversation(conversation.id)
-                }}
-            >
-                <span>{conversation.name}</span>
-                {loading ? <Loader size="xs" variant="dots" /> : ""}
-            </Anchor>
-        </Group>
+        // <Group key={conversation.id + "_navbar_row"} id={conversation.id + "_navbar_row"} >
+        //     {/* <ActionIcon w="1rem" ml="sm" mr="sm" component="button"
+        //         onClick={(event) => {
+        //             console.log("Removing ", conversation.id)
+        //             deleteConversation(conversation.id)
+        //             const newConversations = conversations.filter((c) => c.id !== conversation.id);
+        //             console.log("newLinks", newConversations)
+        //             setConversations(newConversations);
+        //         }}>
+        //         <IconTrash size="1.125rem" />
+        //     </ActionIcon> */}
+        <Anchor
+            className={cx(classes.link, { [classes.linkActive]: conversation.id === settings.activeConversation })}
+            w="16rem"
+            pl="xs"
+            ml="md"
+            key={conversation.id}
+            onClick={(event) => {
+                event.preventDefault();
+                selectConversation(conversation.id)
+            }}
+        >
+            <span>{conversation.name}</span>
+            {loading ? <Loader size="xs" variant="dots" /> : ""}
+        </Anchor>
+        // </Group>
     );
 }
 
