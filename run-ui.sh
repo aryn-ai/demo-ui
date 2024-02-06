@@ -30,7 +30,8 @@ cd "${PROXYDIR}"
 openssl req -batch -x509 -newkey rsa:4096 -days 10000 \
 -subj "/C=US/ST=California/O=Aryn.ai/CN=${HOST}" \
 -extensions v3_req -addext "subjectAltName=DNS:${HOST}" \
--noenc -keyout "${HOST}-key.pem" -out "${HOST}-cert.pem"
+-noenc -keyout "${HOST}-key.pem" -out "${HOST}-cert.pem" 2> /dev/null
+echo "Created ${HOST} certificate"
 poetry run python py_proxy/proxy.py "${HOST}" &
 PROXYPID=$!
 trap cleanup EXIT
