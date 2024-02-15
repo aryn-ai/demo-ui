@@ -1,6 +1,6 @@
 import React, { FormEventHandler, useEffect } from 'react';
 import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Button, Card, Center, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Button, Card, Center, Checkbox, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconChevronRight, IconRefresh, IconLink, IconFileTypeHtml, IconFileTypePdf, IconThumbUpOff, IconThumbDownOff } from '@tabler/icons-react';
 import { IconThumbUp, IconThumbUpFilled, IconThumbDown, IconThumbDownFilled } from '@tabler/icons-react';
 import { getAnswer, getFilters, rephraseQuestion } from './Llm';
@@ -49,7 +49,7 @@ const Citation = ({ document, citationNumber }: { document: SearchResultDocument
         </HoverCard>
     );
 }
-const FilterInput = ({ settings, filtersInput, setFiltersInput }: { settings: Settings, filtersInput: any, setFiltersInput: any }) => {
+const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters, setDisableFilters }: { settings: Settings, filtersInput: any, setFiltersInput: any, disableFilters: any, setDisableFilters: any }) => {
     const handleInputChange = (filterName: string, value: string) => {
         setFiltersInput((prevValues: any) => ({
             ...prevValues,
@@ -58,24 +58,34 @@ const FilterInput = ({ settings, filtersInput, setFiltersInput }: { settings: Se
     };
 
     return (
-        <Group>
+        <Group spacing="0">
             {
                 settings.required_filters.map(required_filter => (
-                    <Group>
+                    <Group spacing="0">
                         <Text size="xs">{required_filter}</Text>
                         <TextInput
+                            disabled={disableFilters}
                             onChange={(e) => handleInputChange(required_filter, e.target.value)}
                             value={filtersInput[required_filter] || ''}
                             autoFocus
                             required
-                            error={filtersInput[required_filter] == null || filtersInput[required_filter] == ""}
+                            error={!disableFilters && (filtersInput[required_filter] == null || filtersInput[required_filter] == "")}
                             size="xs"
                             fz="xs"
                             p="sm"
+                            mb="xs"
                         />
                     </Group>
                 ))
-            }</Group>
+            }
+            < Checkbox
+                size="xs"
+                pb="xs"
+                checked={disableFilters}
+                label="Disable filters, this can result in lower quality results"
+                onChange={(event) => setDisableFilters(event.currentTarget.checked)}
+            />
+        </Group>
     )
 }
 const FeedbackButtons = ({ systemChat, settings }: { systemChat: SystemChat, settings: Settings }) => {
@@ -422,6 +432,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     const theme = useMantineTheme();
     const chatInputRef = useRef<HTMLInputElement | null>(null);
     const [chatInput, setChatInput] = useState("");
+    const [disableFilters, setDisableFilters] = useState(false);
     const [filtersInput, setFiltersInput] = useState<{ [key: string]: string }>({});
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
 
@@ -450,19 +461,21 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             let filterResponse;
             let filters: any;
             let filterContent: any = null;
-            if (settings.auto_filter) {
-                filterResponse = await getFilters(chatInput, settings.modelName)
-                console.log(filterResponse)
-                if (filterResponse.ok) {
-                    const filterData = await filterResponse.json();
-                    filterContent = filterData.choices[0].message.content
-                    filters = parseAutoFilters(filterContent, setErrorMessage)
-                }
-            } else if (settings.required_filters.length > 0) {
-                filters = parseFilters(filtersInput, setErrorMessage)
-                filterContent = filtersInput
-                if (filters["bool"]["filter"].length != settings.required_filters.length) {
-                    throw new Error("All required filters not populated");
+            if (!disableFilters) {
+                if (settings.auto_filter) {
+                    filterResponse = await getFilters(chatInput, settings.modelName)
+                    console.log(filterResponse)
+                    if (filterResponse.ok) {
+                        const filterData = await filterResponse.json();
+                        filterContent = filterData.choices[0].message.content
+                        filters = parseAutoFilters(filterContent, setErrorMessage)
+                    }
+                } else if (settings.required_filters.length > 0) {
+                    filters = parseFilters(filtersInput, setErrorMessage)
+                    filterContent = filtersInput
+                    if (filters["bool"]["filter"].length != settings.required_filters.length) {
+                        throw new Error("All required filters not populated");
+                    }
                 }
             } else {
                 filters = null
@@ -482,7 +495,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                     const query = result[1]
                     const openSearchResponse = await openSearchResponseAsync
                     let generatedAnswer = openSearchResponse.ext.retrieval_augmented_generation.answer
-                    if (settings.simplify) {
+                    if (settings.simplify && openSearchResponse.hits.hits.length > 0) {
                         generatedAnswer = await simplifyAnswer(rephrasedQuestion, generatedAnswer)
                     }
                     await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, generatedAnswer, query)
@@ -581,7 +594,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     return (
         <Flex direction="column" h="90vh" sx={{ 'borderStyle': 'none solid none none', 'borderColor': '#eee;' }}>
 
-            {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} /> : null}
+            {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} disableFilters={disableFilters} setDisableFilters={setDisableFilters} /> : null}
             <form onSubmit={handleSubmit} className="input-form">
                 <TextInput
                     onKeyDown={handleInputKeyPress}
