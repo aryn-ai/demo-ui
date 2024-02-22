@@ -4,7 +4,7 @@ const SEARCH_PIPELINE = "hybrid_rag_pipeline"
 const NO_RAG_SEARCH_PIPELINE = "hybrid_pipeline"
 export const FEEDBACK_INDEX_NAME = "feedback"
 
-export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
     let query =
     {
         "_source": SOURCES,
@@ -58,91 +58,38 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, f
     }
     if (filters != null) {
         if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
-            query.query.hybrid.queries[0].bool.filter = filters
+            //keyword
+            query.query.hybrid.queries[0].bool.filter = filters["keyword"]
         }
         if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
-            query.query.hybrid.queries[1].neural.embedding.filter = filters
+            //neural
+            query.query.hybrid.queries[1].neural.embedding.filter = filters["neural"]
         }
     }
+    return query
+}
+
+export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+    let query = hybridSearch(rephrasedQuestion, filters, index_name, model_id)
+
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
     return openSearchCall(query, url)
 }
 
 export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
-    const query: any =
-    {
-        "_source": SOURCES,
-        "query": {
-            "hybrid": {
-                "queries": [
-                    {
-                        "bool": {
-                            "must": [
-                                {
-                                    "exists": {
-                                        "field": "text_representation"
-                                    }
-                                },
-                                {
-                                    "term": {
-                                        "text": {
-                                            "value": rephrasedQuestion,
-                                            "boost": 1
-                                        }
-                                    }
-                                }
-                            ],
-                            "filter": [
-                                {
-                                    "match_all": {}
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "neural": {
-                            "embedding": {
-                                "query_text": rephrasedQuestion,
-                                "k": 100,
-                                "model_id": embeddingModel,
-                                "filter":
-                                {
-                                    "match_all": {}
-                                }
-                            }
-                        }
-                    }
-                ]
-            }
+    let query: any = hybridSearch(rephrasedQuestion, filters, index_name, embeddingModel)
+    query.ext = {
+        "generative_qa_parameters": {
+            "llm_question": question,
+            "conversation_id": conversationId,
+            "context_size": numDocs,
+            "llm_model": llmModel,
         },
-        "ext": {
-            "generative_qa_parameters": {
-                "llm_question": question,
-                "conversation_id": conversationId,
-                "context_size": numDocs,
-                "llm_model": llmModel,
-            },
-            "rerank": {
-                "query_context": {
-                    "query_text": rephrasedQuestion
-                }
+        "rerank": {
+            "query_context": {
+                "query_text": rephrasedQuestion
             }
-        },
-        "size": 20
-    }
-    if (filters != null) {
-        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
-            query.query.hybrid.queries[0].bool.filter = filters
-        } else {
-            console.log("Filters 1 were undefined")
         }
-        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
-            query.query.hybrid.queries[1].neural.embedding.filter = filters
-        } else {
-            console.log("Filters 2 were undefined")
-        }
-    } else {
-        console.log("Filters were null")
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
 

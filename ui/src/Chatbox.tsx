@@ -261,18 +261,32 @@ const UserChatBox = ({ id, interaction_id, query, rephrasedQuery }: UserChat) =>
 }
 
 function parseFilters(filterInputs: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
-    let result: any = {
+    let resultNeural: any = {
+        "bool": {
+            "filter": []
+        }
+    }
+    let resultKeyword: any = {
         "bool": {
             "filter": []
         }
     }
     Object.entries(filterInputs).forEach(([filter, filterValue]) => {
-        result["bool"]["filter"].push({
+        resultNeural["bool"]["filter"].push({
             "match_phrase": {
                 [`properties.${filter}`]: filterValue
             }
         })
+        resultKeyword["bool"]["filter"].push({
+            "match_phrase": {
+                [`properties.${filter}.keyword`]: filterValue
+            }
+        })
     });
+    const result = {
+        "keyword": resultKeyword,
+        "neural": resultNeural
+    }
     return result
 }
 
@@ -473,7 +487,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                 } else if (settings.required_filters.length > 0) {
                     filters = parseFilters(filtersInput, setErrorMessage)
                     filterContent = filtersInput
-                    if (filters["bool"]["filter"].length != settings.required_filters.length) {
+                    if (filters["keyword"]["bool"]["filter"].length != settings.required_filters.length) {
                         throw new Error("All required filters not populated");
                     }
                 }
