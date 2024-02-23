@@ -213,7 +213,6 @@ def healthz(arg=None):
 
 if __name__ == '__main__':
     # Use gevent WSGIServer for asynchronous behavior
-    kwargs = {}
     if os.environ.get("SSL", "1") == "0":
         print("Proxy not serving over SSL.")
         http_server = WSGIServer(('0.0.0.0', PORT), app)
