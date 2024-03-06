@@ -1,16 +1,16 @@
 import semverGTE from "semver/functions/gte";
-import {Mutex} from "async-mutex";
+import { Mutex } from "async-mutex";
 
 const SOURCES = ["type", "_id", "doc_id", "properties", "title", "text_representation", "bbox"]
-// const SEARCH_PIPELINE = "ga-demo-pipeline-hybrid"
 const SEARCH_PIPELINE = "hybrid_rag_pipeline"
 const NO_RAG_SEARCH_PIPELINE = "hybrid_pipeline"
+export const FEEDBACK_INDEX_NAME = "feedback"
 // access with getOpenSearchVersion
-const OS_VERSION_OBJ: {osVersion: string} = {osVersion: ""}
+const OS_VERSION_OBJ: { osVersion: string } = { osVersion: "" }
 
 
 const getOpenSearchVersion = async () => {
-    if(OS_VERSION_OBJ.osVersion.length === 0) {
+    if (OS_VERSION_OBJ.osVersion.length === 0) {
         const response = await fetch("/opensearch-version");
         if (response.ok) {
             OS_VERSION_OBJ.osVersion = await response.text();
@@ -29,16 +29,31 @@ export const is2dot12plus = async () => {
     return semverGTE(version, "2.12.0");
 }
 
-export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, index_name: string, model_id: string) => {
-    const query =
+export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+    let query =
     {
         "_source": SOURCES,
         "query": {
             "hybrid": {
                 "queries": [
                     {
-                        "match": {
-                            "text_representation": rephrasedQuestion
+                        "bool": {
+                            "must": [
+                                {
+                                    "exists": {
+                                        "field": "text_representation"
+                                    }
+                                },
+                                {
+                                    "match": {
+                                        "text_representation": rephrasedQuestion
+                                    }
+                                }
+                            ],
+                            "filter": [
+                                {
+                                    "match_all": {}
+                                }]
                         }
                     },
                     {
@@ -46,82 +61,103 @@ export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, i
                             "embedding": {
                                 "query_text": rephrasedQuestion,
                                 "k": 100,
-                                "model_id": model_id
+                                "model_id": model_id,
+                                "filter":
+                                {
+                                    "match_all": {}
+                                }
                             }
                         }
                     }
                 ]
             }
         },
-        "size": 20
+        "size": 20,
+        "ext": {
+            "rerank": {
+                "query_context": {
+                    "query_text": rephrasedQuestion
+                }
+            }
+        }
     }
+    if (filters != null) {
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
+            //keyword
+            query.query.hybrid.queries[0].bool.filter = filters["keyword"]
+        }
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
+            //neural
+            query.query.hybrid.queries[1].neural.embedding.filter = filters["neural"]
+        }
+    }
+    return query
+}
+
+export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+    let query = hybridSearch(rephrasedQuestion, filters, index_name, model_id)
+
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
     return openSearchCall(query, url)
 }
 
-export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
-    let genQaParams: {[key: string]: any} = {
-        "llm_question": question,
-        "context_size": numDocs,
-        "llm_model": llmModel,
-    }
-    if(await is2dot12plus()) {
-        genQaParams.memory_id = conversationId;
-    } else {
-        genQaParams.conversation_id = conversationId;
-    }
-    const query =
-    {
-        "_source": SOURCES,
-        "query": {
-            "hybrid": {
-                "queries": [
-                    {
-                        "match": {
-                            "text_representation": rephrasedQuestion
-                        }
-                    },
-                    {
-                        "neural": {
-                            "embedding": {
-                                "query_text": rephrasedQuestion,
-                                "k": 100,
-                                "model_id": embeddingModel
-                            }
-                        }
-                    }
-                ]
+export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
+    let query: any = hybridSearch(rephrasedQuestion, filters, index_name, embeddingModel)
+    query.ext = {
+        "generative_qa_parameters": {
+            "llm_question": question,
+            "context_size": numDocs,
+            "llm_model": llmModel,
+        },
+        "rerank": {
+            "query_context": {
+                "query_text": rephrasedQuestion
             }
-        },
-        "ext": {
-            "generative_qa_parameters": genQaParams
-        },
-        "size": 20
+        }
+    }
+    if (await is2dot12plus()) {
+        query.extgenerative_qa_parameters.memory_id = conversationId;
+    } else {
+        query.extgenerative_qa_parameters.conversation_id = conversationId;
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
-    return openSearchCall(query, url)
+
+    return [openSearchCall(query, url), query]
 }
+
+export const updateInteractionAnswer = async (interactionId: any, answer: string, query: any) => {
+    console.log("Updating interaction with new answer", interactionId)
+    const url = "/opensearch/_plugins/_ml/memory/message/" + interactionId
+    const data = {
+        "response": answer,
+        "additional_info": {
+            "queryUsed": query
+        }
+    }
+    return openSearchCall(data, url, "PUT")
+}
+
 export const getIndices = async () => {
     const url = "/opensearch/_aliases?pretty"
     return openSearchNoBodyCall(url)
 }
 export const getEmbeddingModels = async () => {
     const body = {
-      "query": {
-        "bool": {
-          "must_not": {
-            "range": {
-              "chunk_number": {
-                "gte": 0
-              } 
-            } 
-          },
-          "must": [
-            { "term": {"algorithm": "TEXT_EMBEDDING"}},
-            { "term": {"model_state": "DEPLOYED"}}
-          ]
+        "query": {
+            "bool": {
+                "must_not": {
+                    "range": {
+                        "chunk_number": {
+                            "gte": 0
+                        }
+                    }
+                },
+                "must": [
+                    { "term": { "algorithm": "TEXT_EMBEDDING" } },
+                    { "term": { "model_state": "DEPLOYED" } }
+                ]
+            }
         }
-      }
     }
     const url = "/opensearch/_plugins/_ml/models/_search"
     return openSearchCall(body, url)
@@ -131,7 +167,7 @@ export const createConversation = async (conversationId: string) => {
         "name": conversationId
     }
     let url;
-    if(await is2dot12plus()) {
+    if (await is2dot12plus()) {
         url = "/opensearch/_plugins/_ml/memory/"
     } else {
         url = "/opensearch/_plugins/_ml/memory/conversation"
@@ -139,7 +175,7 @@ export const createConversation = async (conversationId: string) => {
     return openSearchCall(body, url)
 }
 export const getInteractions = async (conversationId: any) => {
-    if(await is2dot12plus()) {
+    if (await is2dot12plus()) {
         const url = "/opensearch/_plugins/_ml/memory/" + conversationId + "/_search"
         const body = {
             "query": {
@@ -161,7 +197,7 @@ export const getInteractions = async (conversationId: any) => {
 }
 export const getConversations = async () => {
     let url;
-    if(await is2dot12plus()) {
+    if (await is2dot12plus()) {
         url = "/opensearch/_plugins/_ml/memory/"
     } else {
         url = "/opensearch/_plugins/_ml/memory/conversation/"
@@ -171,7 +207,7 @@ export const getConversations = async () => {
 export const deleteConversation = async (conversation_id: string) => {
     console.log("Going to delete", conversation_id)
     let url;
-    if(await is2dot12plus()) {
+    if (await is2dot12plus()) {
         url = "/opensearch/_plugins/_ml/memory/" + conversation_id
     } else {
         url = "/opensearch/_plugins/_ml/memory/conversation/" + conversation_id
@@ -277,4 +313,49 @@ export async function queryOpenSearch(question: string, index_name: string, mode
     console.log("OS query ", JSON.stringify(query))
     var response = sendQuery(query, index_name);
     return response;
+}
+
+export const createFeedbackIndex = async () => {
+    const indexMappings = {
+        "mappings": {
+            "properties": {
+                "interaction_id": {
+                    "type": "keyword"
+                },
+                "thumb": {
+                    "type": "keyword"
+                },
+                "conversation_id": {
+                    "type": "keyword"
+                },
+                "comment": {
+                    "type": "text"
+                }
+            }
+        }
+    }
+    openSearchCall(indexMappings, "/opensearch/" + FEEDBACK_INDEX_NAME, "PUT")
+}
+
+export const updateFeedback = async (conversationId: string, interactionId: string, thumb: boolean | null, comment: string | null) => {
+    console.log(thumb);
+    // get entire conversation
+    var conversationSnapshot = await getInteractions(conversationId)
+    let feedbackDoc: any = {
+        "doc": {
+            "interaction_id": interactionId,
+            "conversation_id": conversationId,
+            "thumb": (thumb === null ? "null" : (thumb ? "up" : "down")),
+            "comment": (comment === null || comment == "" ? "null" : comment),
+            "conversation_snapshot": conversationSnapshot
+        },
+        "doc_as_upsert": true
+    }
+    const url = "/opensearch/" + FEEDBACK_INDEX_NAME + "/_update/" + interactionId
+    openSearchCall(feedbackDoc, url, "POST")
+}
+
+export const getFeedback = async (interactionId: string) => {
+    const url = "/opensearch/" + FEEDBACK_INDEX_NAME + "/_doc/" + interactionId
+    return openSearchNoBodyCall(url)
 }

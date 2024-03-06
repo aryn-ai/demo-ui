@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { ChatBox } from './Chatbox'
+import { ChatBox, thumbToBool } from './Chatbox'
 import { ControlPanel } from './Controlpanel'
 import { ConversationListNavbar } from './ConversationList'
 import { DocList } from './Doclist'
 import { AppShell, Burger, Container, Footer, Grid, Group, Header, Image, Notification, Stack, Text } from '@mantine/core';
 import { SearchResultDocument, Settings, SystemChat, UserChat } from './Types';
 import { IconX } from '@tabler/icons-react';
-import { getInteractions } from './OpenSearch';
+import { getFeedback, getInteractions } from './OpenSearch';
 
 
 
@@ -49,15 +49,20 @@ export default function App() {
         const interactionsData = await interactionsResponse;
         const interactionsList = interactionsData.interactions ?? interactionsData.messages ?? [];
         console.info("interactionsData: ", interactionsData)
-        interactionsList.forEach((interaction: any) => {
+        const previousInteractionsUnFlattened = await Promise.all(interactionsData.hits.hits.map(async (interaction_raw: any) => {
+          const interaction = interaction_raw._source
+          const interaction_id = interaction_raw._id
+          const feedback = await getFeedback(interaction_id)
           const systemChat = new SystemChat(
             {
-              id: (interaction.interaction_id ?? interaction.message_id) + "_response",
+              id: interaction_id + "_response",
               response: interaction.response,
-              interaction_id: (interaction.interaction_id ?? interaction.message_id),
+              interaction_id: interaction_id,
               // ragPassageCount: null,
               modelName: null,
-              queryUsed: null
+              queryUsed: null,
+              feedback: feedback.found ? thumbToBool(feedback._source.thumb) : null,
+              comment: feedback.found ? feedback._source.comment : ""
             });
           const userChat = new UserChat(
             {
@@ -66,8 +71,11 @@ export default function App() {
               interaction_id: (interaction.interaction_id ?? interaction.message_id),
               rephrasedQuery: null
             });
-          previousInteractions = [...previousInteractions, systemChat, userChat]
-        });
+          return [systemChat, userChat];
+        }));
+        previousInteractionsUnFlattened.forEach((chats) => {
+          previousInteractions = [...previousInteractions, chats[0], chats[1]]
+        })
         console.log("Setting previous interactions", previousInteractions)
         setChatHistory(previousInteractions)
       } else {

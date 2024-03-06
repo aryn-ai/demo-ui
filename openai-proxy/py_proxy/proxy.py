@@ -13,6 +13,7 @@ import urllib3
 import requests
 import os
 import sys
+import openai
 from flask_cors import CORS
 from werkzeug.datastructures import Headers
 import io
@@ -34,6 +35,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from http://loc
 
 # Replace this with your actual OpenAI API key
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+openai.api_key = OPENAI_API_KEY
 
 # API endpoint of the OpenAI service
 OPENAI_API_BASE = "https://api.openai.com"
@@ -137,6 +139,52 @@ def proxy():
         as_attachment=True,
         download_name = download_name
     )
+
+def make_openai_call(messages):
+    response = openai.ChatCompletion.create(
+      model="gpt-4",
+      messages=messages,
+      temperature=0.0,
+      stream=False
+    )
+    
+    return response
+
+@app.route('/aryn/simplify', methods=['POST', 'OPTIONS'])
+def simplify_answer():
+    if request.method == 'OPTIONS':
+        return optionsResp('POST')
+    
+    summarize_prompt = """
+You are given a question and an answer anontated with citations in the format [{citation_number}].
+
+Reformat the answer as follows:
+--
+The answer can be found in search result(s) [{citation number1}], [{citation number2}] ...
+{summary}
+--
+
+summary = If the answer is less than 5 sentences and less than 100 words return it unchanged. Otherwise return a summary of the answer.
+
+"""
+
+    question = request.json.get('question')
+    answer = request.json.get('answer')
+    prompt = f"""
+        
+    Question asked:
+    {question}
+
+    Answer:
+    {answer}
+        """
+    messages = [
+        {"role": "system", "content": summarize_prompt},
+        {"role": "user", "content": prompt}
+    ]
+    open_ai_result = make_openai_call(messages)
+    cleaned_answer = open_ai_result.choices[0].message.content
+    return cleaned_answer
 
 @app.route('/opensearch/<path:os_path>', methods=['GET','POST','PUT','DELETE','HEAD','OPTIONS'])
 def proxy_opensearch(os_path):

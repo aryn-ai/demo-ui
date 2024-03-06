@@ -14,10 +14,10 @@ export class SearchResultDocument {
 
     isPdf() {
         if (this.properties.filetype === "application/pdf") {
-          return true;
+            return true;
         }
         if (this.url.endsWith(".pdf")) { // legacy test
-          return true;
+            return true;
         }
         return false;
     }
@@ -40,6 +40,9 @@ export class SystemChat {
     response: string = "";
     hits: SearchResultDocument[] = new Array();
     queryUsed: string | null = "";
+    feedback: boolean | null = null;
+    comment: string = "";
+    filterContent: any;
 
     public constructor(init?: Partial<SystemChat>) {
         Object.assign(this, init);
@@ -53,6 +56,9 @@ export class Settings {
     modelId: string = "abScoYoBAwYohYvwjxcP";
     availableModels: string[] = ["gpt-3.5-turbo", "gpt-4"]
     activeConversation: string = "";
+    simplify: boolean = true;
+    auto_filter: boolean = false;
+    required_filters: string[] = ["_product_codes"]
 
     public constructor(init?: Partial<Settings>) {
         Object.assign(this, init);
