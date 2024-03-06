@@ -4,7 +4,8 @@ FROM nikolaik/python-nodejs:python3.11-nodejs20
 
 WORKDIR /home/pn/js-ui
 COPY ui/package.json ui/package-lock.json ui/npm-install.sh ui/pdf.worker.js.patch ./
-RUN /bin/bash npm-install.sh
+RUN --mount=type=cache,target=/root/.npm/_cacache,sharing=locked \
+    /bin/bash npm-install.sh
 
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
@@ -13,7 +14,8 @@ ENV POETRY_NO_INTERACTION=1 \
 
 WORKDIR /home/pn/py-proxy
 COPY openai-proxy/pyproject.toml openai-proxy/poetry.lock openai-proxy/README.md ./
-RUN poetry install --only main --no-root && rm -rf $POETRY_CACHE_DIR
+RUN --mount=type=cache,target=/tmp/poetry_cache,sharing=locked \
+    poetry install --only main --no-root
 
 WORKDIR /
 COPY ui /home/pn/js-ui
