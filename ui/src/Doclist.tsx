@@ -11,6 +11,7 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
     const openDocument = () => {
         if (document.isPdf()) {
             const dataString = JSON.stringify(document);
+            console.log("You clicked: ", document)
             localStorage.setItem('pdfDocumentMetadata', dataString);
             window.open('/viewPdf');
         } else {

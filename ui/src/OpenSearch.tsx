@@ -96,7 +96,6 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
 
 export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
     let query = hybridSearch(rephrasedQuestion, filters, index_name, model_id)
-
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
     return openSearchCall(query, url)
 }
@@ -119,6 +118,20 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
         query.extgenerative_qa_parameters.memory_id = conversationId;
     } else {
         query.extgenerative_qa_parameters.conversation_id = conversationId;
+    }
+    if (filters != null) {
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
+            query.query.hybrid.queries[0].bool.filter = filters
+        } else {
+            console.log("Filters 1 were undefined")
+        }
+        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
+            query.query.hybrid.queries[1].neural.embedding.filter = filters
+        } else {
+            console.log("Filters 2 were undefined")
+        }
+    } else {
+        console.log("Filters were null")
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
 

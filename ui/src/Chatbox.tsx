@@ -207,6 +207,15 @@ const SystemChatBox = ({ systemChat, settings }: { systemChat: SystemChat, setti
                     }
                     )
                 }
+                {/* =======
+        const parsed = JSON.parse(systemChat.filterContent);
+        return (
+            <Container>
+                    {parsed["location"] !== "unknown" && (<Badge size="xs" variant="filled" mr="xs">{parsed["location"]}</Badge>)}
+                    {parsed["airplane_name"] !== "unknown" && (<Badge size="xs" variant="filled" color="pink" mr="xs">{parsed["airplane_name"]}</Badge>)}
+                    {parsed["date_start"] !== "unknown" && (<Badge size="xs" variant="filled" color="teal" mr="xs">{parsed["date_start"] + ' <= day'}</Badge>)}
+                    {parsed["date_end"] !== "unknown" && (<Badge size="xs" variant="filled" color="teal" mr="xs">{'day <= ' + parsed["date_end"]}</Badge>)}
+>>>>>>> ntsb-filters */}
             </Container>
         )
     }
@@ -233,10 +242,11 @@ const SystemChatBox = ({ systemChat, settings }: { systemChat: SystemChat, setti
             </Text>
 
             <FeedbackButtons systemChat={systemChat} settings={settings} />
-
-            {systemChat.filterContent ?
-                filters()
-                : null}
+            {
+                systemChat.filterContent ?
+                    filters()
+                    : null
+            }
         </Card >
     );
 }
@@ -555,7 +565,6 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                     console.log("Info separate processor : set docs in independent thread to: ", parsedOpenSearchResults)
                     setDocsLoading(false)
                 }
-
                 const startTime = new Date(Date.now());
                 // const openSearchResults = await hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.modelName, settings.ragPassageCount);
                 await Promise.all([
