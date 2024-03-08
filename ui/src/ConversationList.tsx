@@ -148,10 +148,10 @@ export const ConversationListNavbar = ({ navBarOpened, settings, setSettings, se
         let result: any = []
         const getConversationsResult = await getConversations();
         let retrievedConversations: { conversations: any } = { conversations: null };
-        if (await is2dot12plus()) {
-            retrievedConversations.conversations = getConversationsResult.memories;
-        } else {
+        if ("conversations" in getConversationsResult) {
             retrievedConversations.conversations = getConversationsResult.conversations;
+        } else {
+            retrievedConversations.conversations = getConversationsResult.memories;
         }
         retrievedConversations.conversations.forEach((conversation: any) => {
             result = [{ id: (conversation.conversation_id ?? conversation.memory_id), name: conversation.name, created_at: conversation.create_time }, ...result]

@@ -114,24 +114,10 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
             }
         }
     }
-    if (await is2dot12plus()) {
-        query.extgenerative_qa_parameters.memory_id = conversationId;
+    if (await is2dot12plus() && false) {
+        query.ext.generative_qa_parameters.memory_id = conversationId;
     } else {
-        query.extgenerative_qa_parameters.conversation_id = conversationId;
-    }
-    if (filters != null) {
-        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
-            query.query.hybrid.queries[0].bool.filter = filters
-        } else {
-            console.log("Filters 1 were undefined")
-        }
-        if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[1].neural) {
-            query.query.hybrid.queries[1].neural.embedding.filter = filters
-        } else {
-            console.log("Filters 2 were undefined")
-        }
-    } else {
-        console.log("Filters were null")
+        query.ext.generative_qa_parameters.conversation_id = conversationId;
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
 

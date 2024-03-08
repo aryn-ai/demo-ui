@@ -41,7 +41,7 @@ openai.api_key = OPENAI_API_KEY
 OPENAI_API_BASE = "https://api.openai.com"
 
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST", "localhost")
-OPENSEARCH_URL = f"https://{OPENSEARCH_HOST}:9200/"
+OPENSEARCH_URL = f"http://{OPENSEARCH_HOST}:4000/"
 
 UI_HOST = os.environ.get("LOAD_BALANCER", "localhost")
 UI_BASE = f"https://{UI_HOST}:3001"
@@ -156,15 +156,60 @@ def simplify_answer():
         return optionsResp('POST')
     
     summarize_prompt = """
-You are given a question and an answer anontated with citations in the format [{citation_number}].
+You are a post processor for a question answering system. Your job is to modify a system generated answer for a user question, based on the type of question it is. 
 
-Reformat the answer as follows:
---
-The answer can be found in search result(s) [{citation number1}], [{citation number2}] ...
-{summary}
---
+Questions can be of the following types:
+1. Part number lookup, e.g. What is the part number for the service kit for a Reba RL A5?
+2. General information lookup, e.g. What pad compound should i use on my Centerline rotor?
+3. Binary questions, e.g. Can I combine the clamp for my brake and my XX shifter?
+4. Process lookups, e.g. How do I adjust the shifting on my XX shifter?
+5. Other
 
-summary = If the answer is less than 5 sentences and less than 100 words return it unchanged. Otherwise return a summary of the answer.
+The answer will either:
+1. contain some numeric citations to search results, e.g. [1], [2], [5]
+2. say it was unable to find the answer to your question
+
+Your job is to do the following:
+1. If the question is a process lookup and there is a valid answer, say "The answer can be found in search results [{citations}]", followed by a 1 sentence summary of the answer. Do not use more than 1 sentence.
+2. If the answer  says it's unable to answer the question, or there is no information for the question, say "Unable to answer the question based on the search results. Please look at the top results to find relevant references"
+3. Otherwise return the answer unmodified
+
+If citations are surrounded by a dollar sign and curly braces, e.g. [${1}], change it to only be a number surrounded by square brackets, i.e. [1]
+
+Examples:
+Question: what is the part number I need for a service kit for my Reba RL A5?
+
+System generated answer:
+The answer can be found in search result(s) [1]. The part number for the service kit for a Reba RL A5 is 00.4315.032.650.
+
+Answer:
+The answer can be found in search result(s) [1]. The part number for the service kit for a Reba RL A5 is 00.4315.032.650.
+----
+Question: Are there different color lower leg options for my SID?
+
+
+System generated answer:
+The answer can be found in search result(s) [no citation given].
+The search results do not provide information on different color options for the lower legs of a SID suspension fork. For accurate information, please refer to the product catalog or contact the manufacturer directly.
+
+Answer:
+Unable to answer the question based on the search results. Please look at the top results to find relevant references
+
+----
+
+Question: How do I adjust sag on my super deluxe coil?
+
+System generated answer:
+The answer can be found in search result(s) [4].
+To adjust sag on your Super Deluxe Coil, follow these steps: 
+1. Install the coil spring and spring retainer.
+2. Adjust the spring preload adjuster until the coil spring contacts the spring retainer. Ensure there is no vertical play between the coil spring and the retainer.
+3. Do not exceed 5 mm (or five full turns of rotation) on the spring preload adjuster as this will damage the shock.
+4. If more than 5 turns are necessary to achieve proper sag, use a higher weight spring.
+5. If your target sag percentage is not achieved, spring preload adjustment and/or coil spring replacement must be performed.
+
+Answer:
+The answer can be found in search result [4]. To adjust the saf on your Super Deluxe Coil, you will need to install a coil spring and spring retainer, followed by some additional adjustments.
 
 """
 
@@ -172,7 +217,7 @@ summary = If the answer is less than 5 sentences and less than 100 words return 
     answer = request.json.get('answer')
     prompt = f"""
         
-    Question asked:
+    Current question and generated answer:
     {question}
 
     Answer:

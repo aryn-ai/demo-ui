@@ -49,16 +49,17 @@ export class SystemChat {
     }
 }
 export class Settings {
+
     openSearchIndex: string = "";
     embeddingModel: string = "";
     ragPassageCount: number = 5;
-    modelName: string = "gpt-4";
+    modelName: string = "gpt-4-turbo-preview";
     modelId: string = "abScoYoBAwYohYvwjxcP";
-    availableModels: string[] = ["gpt-3.5-turbo", "gpt-4"]
+    availableModels: string[] = ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo-preview"]
     activeConversation: string = "";
     simplify: boolean = true;
     auto_filter: boolean = false;
-    required_filters: string[] = ["_product_codes"]
+    required_filters: string[] = ["_product_codes"];
 
     public constructor(init?: Partial<Settings>) {
         Object.assign(this, init);

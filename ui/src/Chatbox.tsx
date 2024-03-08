@@ -1,6 +1,6 @@
 import React, { FormEventHandler, useEffect } from 'react';
 import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Button, Card, Center, Checkbox, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Button, Card, Center, Checkbox, Chip, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, Tooltip, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconChevronRight, IconRefresh, IconLink, IconFileTypeHtml, IconFileTypePdf, IconThumbUpOff, IconThumbDownOff } from '@tabler/icons-react';
 import { IconThumbUp, IconThumbUpFilled, IconThumbDown, IconThumbDownFilled } from '@tabler/icons-react';
 import { getAnswer, getFilters, rephraseQuestion } from './Llm';
@@ -49,7 +49,7 @@ const Citation = ({ document, citationNumber }: { document: SearchResultDocument
         </HoverCard>
     );
 }
-const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters, setDisableFilters }: { settings: Settings, filtersInput: any, setFiltersInput: any, disableFilters: any, setDisableFilters: any }) => {
+const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters }: { settings: Settings, filtersInput: any, setFiltersInput: any, disableFilters: any }) => {
     const handleInputChange = (filterName: string, value: string) => {
         setFiltersInput((prevValues: any) => ({
             ...prevValues,
@@ -78,16 +78,25 @@ const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters, 
                     </Group>
                 ))
             }
-            < Checkbox
-                size="xs"
-                pb="xs"
-                checked={disableFilters}
-                label="Disable filters, this can result in lower quality results"
-                onChange={(event) => setDisableFilters(event.currentTarget.checked)}
-            />
         </Group>
     )
 }
+const SearchControlPanel = ({ disableFilters, setDisableFilters, disableQuestionRewriting, setDisableQuestionRewriting }:
+    { disableFilters: any, setDisableFilters: any, disableQuestionRewriting: any, setDisableQuestionRewriting: any }) => {
+    return (
+        <Group>
+            <Tooltip label="Disabling filters can result in lower quality results">
+                <Chip size="xs" checked={!disableFilters} onChange={() => setDisableFilters((v: any) => !v)} variant="light">
+                    Filters
+                </Chip>
+            </Tooltip>
+            <Chip size="xs" checked={!disableQuestionRewriting} onChange={() => setDisableQuestionRewriting((v: any) => !v)} variant="light">
+                Question rewriting
+            </Chip>
+        </Group >
+    )
+}
+
 const FeedbackButtons = ({ systemChat, settings }: { systemChat: SystemChat, settings: Settings }) => {
     const [thumbUpState, setThumbUp] = useState(systemChat.feedback);
     const [comment, setComment] = useState(systemChat.comment);
@@ -168,7 +177,7 @@ const LoadingChatBox = ({ loadingMessage }: { loadingMessage: (string | null) })
         </Container >
     );
 }
-const SystemChatBox = ({ systemChat, settings }: { systemChat: SystemChat, settings: Settings }) => {
+const SystemChatBox = ({ systemChat, settings, handleSubmit }: { systemChat: SystemChat, settings: Settings, handleSubmit: any }) => {
     const citationRegex = /\[(\d+)\]/g;
     const theme = useMantineTheme();
     // const [searchResultsCopy, setSearchResultsCopy] = useState(systemChat.hits)
@@ -258,7 +267,7 @@ const UserChatBox = ({ id, interaction_id, query, rephrasedQuery }: UserChat) =>
         <Card key={id} mr={theme.spacing.xl} padding="lg">
             <Text size="sm" fw={500}>
                 {query}
-            </Text>{rephrasedQuery ?
+            </Text>{rephrasedQuery && rephrasedQuery != query ?
                 <Text fz="xs" fs="italic" color="dimmed">
                     Rephrased question: {rephrasedQuery}
                 </Text>
@@ -457,6 +466,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     const chatInputRef = useRef<HTMLInputElement | null>(null);
     const [chatInput, setChatInput] = useState("");
     const [disableFilters, setDisableFilters] = useState(false);
+    const [disableRewriting, setDisableRewriting] = useState(true);
     const [filtersInput, setFiltersInput] = useState<{ [key: string]: string }>({});
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
 
@@ -480,8 +490,6 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                 }
             })
             // console.log("history: ", chatHistoryText)
-            setLoadingMessage("Rephrasing question with conversation context");
-            const rephraseQuestionResponse = await rephraseQuestion(chatInput, chatHistoryInteractions, settings.modelName)
             let filterResponse;
             let filters: any;
             let filterContent: any = null;
@@ -505,78 +513,84 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                 filters = null
             }
             console.log("Filters are: ", filters)
-            if (rephraseQuestionResponse.ok) {
+            let question: string = chatInput;
+            if (!disableRewriting) {
+                setLoadingMessage("Rephrasing question with conversation context");
+                const rephraseQuestionResponse = await rephraseQuestion(chatInput, chatHistoryInteractions, settings.modelName)
+                // if (rephraseQuestionResponse.ok) {
                 const responseData = await rephraseQuestionResponse.json();
                 const rephrasedQuestion = responseData.choices[0].message.content;
                 console.log("Rephrased question to ", rephrasedQuestion)
-                setLoadingMessage("Querying knowledge database with rephrased question: \"" + rephrasedQuestion + "\"");
-
-                console.log("Filters are:", JSON.stringify(filters))
-                setLoadingMessage("Using filter: \"" + JSON.stringify(filters) + "\". Generating answer..");
-
-                const clean = async (result: any) => {
-                    const openSearchResponseAsync = result[0]
-                    const query = result[1]
-                    const openSearchResponse = await openSearchResponseAsync
-                    let generatedAnswer = openSearchResponse.ext.retrieval_augmented_generation.answer
-                    if (settings.simplify && openSearchResponse.hits.hits.length > 0) {
-                        generatedAnswer = await simplifyAnswer(rephrasedQuestion, generatedAnswer)
-                    }
-                    await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, generatedAnswer, query)
-                    openSearchResponse.ext.retrieval_augmented_generation.answer = generatedAnswer
-                    return openSearchResponse
-                }
-
-                const populateChatFromOs = (openSearchResults: any) => {
-                    console.log("Main processor ", openSearchResults)
-                    console.log("Main processor: OS results ", openSearchResults)
-                    const endTime = new Date(Date.now());
-                    const elpased = endTime.getTime() - startTime.getTime()
-                    console.log("Main processor: OS took seconds: ", elpased)
-                    const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
-                    // todo: replace these with interaction id
-                    const newChat = new UserChat({
-                        id: parsedOpenSearchResults.interactionId + "_user",
-                        interaction_id: parsedOpenSearchResults.interactionId,
-                        query: chatInput,
-                        rephrasedQuery: rephrasedQuestion
-                    });
-                    const newSystemChat = new SystemChat(
-                        {
-                            id: parsedOpenSearchResults.interactionId + "_system",
-                            interaction_id: parsedOpenSearchResults.interactionId,
-                            response: parsedOpenSearchResults.chatResponse,
-                            ragPassageCount: settings.ragPassageCount,
-                            modelName: settings.modelName,
-                            queryUsed: rephrasedQuestion,
-                            hits: parsedOpenSearchResults.documents,
-                            filterContent: filterContent
-                        });
-                    setChatHistory([newSystemChat, newChat, ...chatHistory,]);
-                }
-                const populateDocsFromOs = (openSearchResults: any) => {
-                    console.log("Info separate processor ", openSearchResults)
-                    console.log("Info separate processor : OS results ", openSearchResults)
-                    const endTime = new Date(Date.now());
-                    const elpased = endTime.getTime() - startTime.getTime()
-                    console.log("Info separate processor : OS took seconds: ", elpased)
-                    const parsedOpenSearchResults = parseOpenSearchResultsOg(openSearchResults)
-                    setSearchResults(parsedOpenSearchResults)
-                    console.log("Info separate processor : set docs in independent thread to: ", parsedOpenSearchResults)
-                    setDocsLoading(false)
-                }
-                const startTime = new Date(Date.now());
-                // const openSearchResults = await hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.modelName, settings.ragPassageCount);
-                await Promise.all([
-                    hybridConversationSearchNoRag(rephrasedQuestion, filters, settings.openSearchIndex, settings.embeddingModel).then(populateDocsFromOs),
-                    hybridConversationSearch(chatInput, rephrasedQuestion, filters, settings.activeConversation, settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount)
-                        .then(clean).then(populateChatFromOs),
-                ]);
-
-            } else {
-                console.error('Error calling the API:', rephraseQuestionResponse.statusText);
-                throw new Error('Error calling the API: ' + rephraseQuestionResponse.statusText);
+                // }
+                question = rephrasedQuestion
             }
+            console.log("Question is: ", question)
+
+            setLoadingMessage("Querying knowledge database with question: \"" + question + "\"");
+            if (filters != null) {
+                setLoadingMessage("Using filter: \"" + JSON.stringify(filters) + "\". Generating answer..");
+            }
+
+            const clean = async (result: any) => {
+                const openSearchResponseAsync = result[0]
+                const query = result[1]
+                const openSearchResponse = await openSearchResponseAsync
+                let generatedAnswer = openSearchResponse.ext.retrieval_augmented_generation.answer
+                if (settings.simplify && openSearchResponse.hits.hits.length > 0) {
+                    console.log("Simplifying answer: ", generatedAnswer)
+                    setLoadingMessage("Simplifying answer..");
+                    generatedAnswer = await simplifyAnswer(question, generatedAnswer)
+                }
+                await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, generatedAnswer, query)
+                openSearchResponse.ext.retrieval_augmented_generation.answer = generatedAnswer
+                return openSearchResponse
+            }
+
+            const populateChatFromOs = (openSearchResults: any) => {
+                console.log("Main processor ", openSearchResults)
+                console.log("Main processor: OS results ", openSearchResults)
+                const endTime = new Date(Date.now());
+                const elpased = endTime.getTime() - startTime.getTime()
+                console.log("Main processor: OS took seconds: ", elpased)
+                const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
+                // todo: replace these with interaction id
+                const newChat = new UserChat({
+                    id: parsedOpenSearchResults.interactionId + "_user",
+                    interaction_id: parsedOpenSearchResults.interactionId,
+                    query: chatInput,
+                    rephrasedQuery: question
+                });
+                const newSystemChat = new SystemChat(
+                    {
+                        id: parsedOpenSearchResults.interactionId + "_system",
+                        interaction_id: parsedOpenSearchResults.interactionId,
+                        response: parsedOpenSearchResults.chatResponse,
+                        ragPassageCount: settings.ragPassageCount,
+                        modelName: settings.modelName,
+                        queryUsed: question,
+                        hits: parsedOpenSearchResults.documents,
+                        filterContent: filterContent
+                    });
+                setChatHistory([newSystemChat, newChat, ...chatHistory,]);
+            }
+            const populateDocsFromOs = (openSearchResults: any) => {
+                console.log("Info separate processor ", openSearchResults)
+                console.log("Info separate processor : OS results ", openSearchResults)
+                const endTime = new Date(Date.now());
+                const elpased = endTime.getTime() - startTime.getTime()
+                console.log("Info separate processor : OS took seconds: ", elpased)
+                const parsedOpenSearchResults = parseOpenSearchResultsOg(openSearchResults)
+                setSearchResults(parsedOpenSearchResults)
+                console.log("Info separate processor : set docs in independent thread to: ", parsedOpenSearchResults)
+                setDocsLoading(false)
+            }
+            const startTime = new Date(Date.now());
+            // const openSearchResults = await hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.modelName, settings.ragPassageCount);
+            await Promise.all([
+                hybridConversationSearchNoRag(question, filters, settings.openSearchIndex, settings.embeddingModel).then(populateDocsFromOs),
+                hybridConversationSearch(chatInput, question, filters, settings.activeConversation, settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount)
+                    .then(clean).then(populateChatFromOs),
+            ]);
         } catch (e) {
             console.log(e)
             if (typeof e === "string") {
@@ -617,7 +631,8 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     return (
         <Flex direction="column" h="90vh" sx={{ 'borderStyle': 'none solid none none', 'borderColor': '#eee;' }}>
 
-            {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} disableFilters={disableFilters} setDisableFilters={setDisableFilters} /> : null}
+            {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} disableFilters={disableFilters} /> : null}
+            <SearchControlPanel disableFilters={disableFilters} setDisableFilters={setDisableFilters} disableQuestionRewriting={disableRewriting} setDisableQuestionRewriting={setDisableRewriting}></SearchControlPanel>
             <form onSubmit={handleSubmit} className="input-form">
                 <TextInput
                     onKeyDown={handleInputKeyPress}
@@ -659,7 +674,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                         if ('query' in chat) {
                             return <UserChatBox key={chat.id + "_user"} id={chat.id} interaction_id={chat.interaction_id} query={chat.query} rephrasedQuery={chat.rephrasedQuery} />
                         } else {
-                            return <SystemChatBox key={chat.id + "_system"} systemChat={chat} settings={settings} />
+                            return <SystemChatBox key={chat.id + "_system"} systemChat={chat} settings={settings} handleSubmit={handleSubmit} />
                         }
                     }
                     )

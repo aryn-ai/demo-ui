@@ -43,45 +43,39 @@ export default function App() {
       setStreaming(true)
       console.log("Loading convos")
       const interactionsResponse = await getInteractions(settings.activeConversation)
-      if (true) {
-        var previousInteractions = new Array<UserChat | SystemChat>()
-        // const interactionsData = await interactionsResponse.json();
-        const interactionsData = await interactionsResponse;
-        const interactionsList = interactionsData.interactions ?? interactionsData.messages ?? [];
-        console.info("interactionsData: ", interactionsData)
-        const previousInteractionsUnFlattened = await Promise.all(interactionsData.hits.hits.map(async (interaction_raw: any) => {
-          const interaction = interaction_raw._source
-          const interaction_id = interaction_raw._id
-          const feedback = await getFeedback(interaction_id)
-          const systemChat = new SystemChat(
-            {
-              id: interaction_id + "_response",
-              response: interaction.response,
-              interaction_id: interaction_id,
-              // ragPassageCount: null,
-              modelName: null,
-              queryUsed: null,
-              feedback: feedback.found ? thumbToBool(feedback._source.thumb) : null,
-              comment: feedback.found ? feedback._source.comment : ""
-            });
-          const userChat = new UserChat(
-            {
-              id: (interaction.interaction_id ?? interaction.message_id) + "_user",
-              query: interaction.input,
-              interaction_id: (interaction.interaction_id ?? interaction.message_id),
-              rephrasedQuery: null
-            });
-          return [systemChat, userChat];
-        }));
-        previousInteractionsUnFlattened.forEach((chats) => {
-          previousInteractions = [...previousInteractions, chats[0], chats[1]]
-        })
-        console.log("Setting previous interactions", previousInteractions)
-        setChatHistory(previousInteractions)
-      } else {
-        console.log("Couldn't load previous interactions for conversation", interactionsResponse)
-        setErrorMessage("Couldn't load previous interactions for conversation")
-      }
+      var previousInteractions = new Array<UserChat | SystemChat>()
+      // const interactionsData = await interactionsResponse.json();
+      const interactionsData = await interactionsResponse;
+      console.info("interactionsData: ", interactionsData)
+      const previousInteractionsUnFlattened = await Promise.all(interactionsData.hits.hits.map(async (interaction_raw: any) => {
+        const interaction = interaction_raw._source
+        const interaction_id = interaction_raw._id
+        const feedback = await getFeedback(interaction_id)
+        const systemChat = new SystemChat(
+          {
+            id: interaction_id + "_response",
+            response: interaction.response,
+            interaction_id: interaction_id,
+            // ragPassageCount: null,
+            modelName: null,
+            queryUsed: null,
+            feedback: feedback.found ? thumbToBool(feedback._source.thumb) : null,
+            comment: feedback.found ? feedback._source.comment : ""
+          });
+        const userChat = new UserChat(
+          {
+            id: interaction_id + "_user",
+            query: interaction.input,
+            interaction_id: interaction_id,
+            rephrasedQuery: null
+          });
+        return [systemChat, userChat];
+      }));
+      previousInteractionsUnFlattened.forEach((chats) => {
+        previousInteractions = [...previousInteractions, chats[0], chats[1]]
+      })
+      console.log("Setting previous interactions", previousInteractions)
+      setChatHistory(previousInteractions)
       setLoadingConversation(false)
       setStreaming(false)
     }

@@ -73,17 +73,17 @@ export default function PdfViewer() {
             const response = await proxiedUrl;
             setUrl(response);
 
-            const pageNum : number = pdfDocumentMetadata.properties.page_number;
-            let boxObj : any = null;
-            const bbox : number[] = pdfDocumentMetadata.bbox;
+            const pageNum: number = pdfDocumentMetadata.properties.page_number ?? pdfDocumentMetadata.properties.page_numbers[0] ?? 1;
+            let boxObj: any = null;
+            const bbox: number[] = pdfDocumentMetadata.bbox;
             if (bbox) {
                 // This is overly complex.  We can simplify when we
                 // drop the backward compatibility stuff below.
                 boxObj = { [pageNum]: [bbox] };
             }
             else {
-                boxObj = pdfDocumentMetadata.properties.boxes ??
-                    pdfDocumentMetadata.properties.coordinates.points;
+                if ("boxes" in pdfDocumentMetadata.properties) boxObj = pdfDocumentMetadata.properties.boxes
+                else if ("coordinates" in pdfDocumentMetadata.properties) boxObj = pdfDocumentMetadata.properties.points
             }
             if (boxObj) {
                 setBoxes(boxObj)
@@ -91,13 +91,13 @@ export default function PdfViewer() {
                 if (!firstPage) {
                     firstPage = pageNum;
                     if (!firstPage) {
-                       firstPage = 1;
+                        firstPage = 1;
                     }
                 }
                 setPageNumber(firstPage);
             }
             else {
-                setPageNumber(1); // i guess
+                setPageNumber(pageNum); // i guess
             }
 
             setLoading(false)
@@ -147,7 +147,7 @@ export default function PdfViewer() {
                     <Container>
                         <Document file={url} onLoadSuccess={onDocumentLoadSuccess}>
                             <Page pageNumber={pageNumber}>
-                                {boxes[pageNumber] && boxes[pageNumber].map((box: any, index: number) => (
+                                {boxes ? boxes[pageNumber] && boxes[pageNumber].map((box: any, index: number) => (
                                     <div
                                         key={index}
                                         style={{
@@ -158,7 +158,7 @@ export default function PdfViewer() {
                                             width: `${(box[2] - box[0]) * 100}%`,
                                             height: `${(box[3] - box[1]) * 100}%`,
                                         }} />
-                                ))}
+                                )) : ""}
                             </Page>
                         </Document>
                     </Container>
