@@ -73,13 +73,13 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
             }
         },
         "size": 20,
-        "ext": {
-            "rerank": {
-                "query_context": {
-                    "query_text": rephrasedQuestion
-                }
-            }
-        }
+        // "ext": {
+        //     "rerank": {
+        //         "query_context": {
+        //             "query_text": rephrasedQuestion
+        //         }
+        //     }
+        // }
     }
     if (filters != null) {
         if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
@@ -108,11 +108,11 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
             "context_size": numDocs,
             "llm_model": llmModel,
         },
-        "rerank": {
-            "query_context": {
-                "query_text": rephrasedQuestion
-            }
-        }
+        // "rerank": {
+        //     "query_context": {
+        //         "query_text": rephrasedQuestion
+        //     }
+        // }
     }
     if (await is2dot12plus() && false) {
         query.ext.generative_qa_parameters.memory_id = conversationId;

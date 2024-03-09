@@ -1,5 +1,5 @@
 import React, { } from 'react';
-import { ActionIcon, Alert, Card, Container, Flex, Group, LoadingOverlay, NavLink, Badge, ScrollArea, Stack, Text, Title, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Alert, Card, Container, Flex, Group, LoadingOverlay, NavLink, Badge, ScrollArea, Stack, Text, Title, useMantineTheme, Tooltip } from '@mantine/core';
 import { useHover } from '@mantine/hooks';
 import { IconInfoCircle, IconFileTypeHtml, IconLink, IconFileTypePdf } from '@tabler/icons-react';
 import { SearchResultDocument, Settings } from './Types';
@@ -20,11 +20,11 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
     }
     function icon() {
         if (document.isPdf()) {
-            return (<IconFileTypePdf size="1.125rem" color={hovered ? theme.colors.blue[8] : theme.colors.blue[6]} />)
+            return (<IconFileTypePdf size="1rem" color={hovered ? theme.colors.blue[8] : theme.colors.blue[6]} />)
         } else if (document.url.endsWith("htm") || document.url.endsWith("html")) {
-            return (<IconFileTypeHtml size="1.125rem" color={hovered ? theme.colors.gray[8] : theme.colors.gray[6]} />)
+            return (<IconFileTypeHtml size="1rem" color={hovered ? theme.colors.gray[8] : theme.colors.gray[6]} />)
         }
-        return (<IconLink size="1.125rem" />)
+        return (<IconLink size="1rem" />)
     };
 
     let snippet: String
@@ -34,26 +34,40 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
     catch (err) {
         snippet = ""
     }
+    const parts: string[] = document.url.split("/");
+    const filename: string = parts[parts.length - 1];
 
     return (
         <div ref={ref}>
-            <Card ml={theme.spacing.xl} maw="calc(100vw - 60rem);" sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank">
-                <Group p="left" mb="0" >
-                    <Title order={5} mb="0" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>{document.index}. {document.title}</Title>
-                    {icon()}
-                </Group>
-                {/* <Group mb="sm" p="0">
+            <Tooltip label={document.title + " " + document.url + " "} position="top" offset={-20}>
+                <Card bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
+                    mb="sm">
+                    {document.title != "Untitled" ?
+                        <Group p="left" mb="0" >
+                            <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>{document.title}</Text>
+                        </Group>
+                        : null
+                    }
+                    {/* <Group mb="sm" p="0">
                     <Badge size="xs" variant="filled">{document.properties["entity"]["location"]}</Badge>
                     <Badge size="xs" variant="filled" color="pink">{document.properties["entity"]["aircraft"]}</Badge>
                     <Badge size="xs" variant="filled" color="teal">{document.properties["entity"]["dateAndTime"]}</Badge>
                 </Group> */}
-                <Group mb="sm">
-                    <Text size="xs" color="gray.7">Relevance score: {document.relevanceScore}</Text>
-                </Group>
-                <Text size="sm" color="gray.9">
+                    <Flex
+                        gap="sm"
+                        justify="flex-start"
+                        align="flex-start"
+                        direction="row"
+                        p="md"
+                    >
+                        {icon()}
+                        <Text size="xs" color="gray.7">{filename}</Text>
+                    </Flex>
+                    {/* <Text size="sm" color="gray.9">
                     {snippet}...
-                </Text>
-            </Card >
+                </Text> */}
+                </Card >
+            </Tooltip>
         </div >
     );
 }
@@ -64,23 +78,32 @@ export const DocList = ({ documents, settings, docsLoading }: { documents: Searc
 
     return (
         <Container bg="white">
-            <Container>
+            {/* <Container>
                 <Alert variant="light" color="green" title="Important" radius="md" icon={icon}>
                     Always refer to the original source document to consider warnings and important notices.
                 </Alert>
-            </Container>
-            <ScrollArea.Autosize pb="0" h="calc(100vh - 12rem);">
-                <LoadingOverlay visible={docsLoading} overlayBlur={2} />
-                <Stack>
-                    {documents.map(document => (
-                        < DocumentItem
-                            key={document.id + Math.random()}
-                            document={document}
-                        />
-                    )
-                    )
-                    }
-                </Stack>
+            </Container> */}
+            <ScrollArea.Autosize pb="0" w="20rem">
+                <Container>
+                    <LoadingOverlay visible={docsLoading} overlayBlur={2} />
+                    <Flex
+                        // bg="rgba(0, 0, 0, .3)"
+                        gap="sm"
+                        justify="flex-start"
+                        align="flex-start"
+                        direction="row"
+                        wrap="nowrap"
+                    >
+                        {documents.map(document => (
+                            < DocumentItem
+                                key={document.id + Math.random()}
+                                document={document}
+                            />
+                        )
+                        )
+                        }
+                    </Flex>
+                </Container>
             </ScrollArea.Autosize>
         </Container >
     );

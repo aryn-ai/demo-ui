@@ -1,11 +1,12 @@
-import React, { FormEventHandler, useEffect } from 'react';
-import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Button, Card, Center, Checkbox, Chip, Code, Container, Divider, Flex, Group, HoverCard, Loader, ScrollArea, Skeleton, Stack, Text, TextInput, Tooltip, useMantineTheme } from '@mantine/core';
-import { IconSearch, IconChevronRight, IconRefresh, IconLink, IconFileTypeHtml, IconFileTypePdf, IconThumbUpOff, IconThumbDownOff } from '@tabler/icons-react';
+import React from 'react';
+import { Dispatch, SetStateAction, useRef, useState } from 'react';
+import { ActionIcon, Anchor, Badge, Card, Center, Chip, Container, Flex, Group, HoverCard, Loader, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
+import { IconSearch, IconChevronRight, IconLink, IconFileTypeHtml, IconFileTypePdf, IconX, IconEdit, IconPlayerPlayFilled } from '@tabler/icons-react';
 import { IconThumbUp, IconThumbUpFilled, IconThumbDown, IconThumbDownFilled } from '@tabler/icons-react';
-import { getAnswer, getFilters, rephraseQuestion } from './Llm';
+import { getFilters, rephraseQuestion } from './Llm';
 import { SearchResultDocument, Settings, SystemChat, UserChat } from './Types';
-import { hybridConversationSearch, hybridConversationSearchNoRag, updateInteractionAnswer, queryOpenSearch, updateFeedback } from './OpenSearch';
+import { hybridConversationSearch, updateInteractionAnswer, updateFeedback } from './OpenSearch';
+import { DocList } from './Doclist';
 
 const Citation = ({ document, citationNumber }: { document: SearchResultDocument, citationNumber: number }) => {
     const [doc, setDoc] = useState(document)
@@ -34,7 +35,7 @@ const Citation = ({ document, citationNumber }: { document: SearchResultDocument
                         window.open(docUrl);
                     }
                 }} >
-                    [{citNum}]
+                    <Badge size="xs" color="gray" variant="filled">{citNum}</Badge>
                 </Anchor>
             </HoverCard.Target>
             <HoverCard.Dropdown>
@@ -81,16 +82,19 @@ const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters }
         </Group>
     )
 }
-const SearchControlPanel = ({ disableFilters, setDisableFilters, disableQuestionRewriting, setDisableQuestionRewriting }:
-    { disableFilters: any, setDisableFilters: any, disableQuestionRewriting: any, setDisableQuestionRewriting: any }) => {
+const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriting, setQuestionRewriting, queryPlanner, setQueryPlanner, settings }:
+    { disableFilters: any, setDisableFilters: any, questionRewriting: any, setQuestionRewriting: any, queryPlanner: boolean, setQueryPlanner: any, settings: Settings }) => {
     return (
-        <Group>
-            <Tooltip label="Disabling filters can result in lower quality results">
+        <Group position='center'>
+            {((settings.required_filters.length > 0) ?
                 <Chip size="xs" checked={!disableFilters} onChange={() => setDisableFilters((v: any) => !v)} variant="light">
                     Filters
-                </Chip>
-            </Tooltip>
-            <Chip size="xs" checked={!disableQuestionRewriting} onChange={() => setDisableQuestionRewriting((v: any) => !v)} variant="light">
+                </Chip> : null)
+            }
+            <Chip key="queryPlanner" size="xs" checked={queryPlanner} onChange={() => setQueryPlanner(!queryPlanner)} variant="light">
+                Query planner
+            </Chip>
+            <Chip key="questionRewriting" size="xs" checked={questionRewriting} onChange={() => setQuestionRewriting(!questionRewriting)} variant="light">
                 Question rewriting
             </Chip>
         </Group >
@@ -113,18 +117,7 @@ const FeedbackButtons = ({ systemChat, settings }: { systemChat: SystemChat, set
         setComment(e.target.value);
     };
     return (
-        <Group position="right" spacing="xs">
-            <TextInput
-                onKeyDown={handleInputKeyPress}
-                onChange={handleInputChange}
-                value={comment}
-                radius="sm"
-                fz="xs"
-                fs="italic"
-                color="blue"
-                variant="unstyled"
-                placeholder="Leave a comment"
-            />
+        <Group position="left" spacing="xs">
             <Group>
                 <ActionIcon size={32} radius="xs" component="button"
                     onClick={(event) => {
@@ -162,6 +155,17 @@ const FeedbackButtons = ({ systemChat, settings }: { systemChat: SystemChat, set
                     }
                 </ActionIcon>
             </Group>
+            <TextInput
+                onKeyDown={handleInputKeyPress}
+                onChange={handleInputChange}
+                value={comment}
+                radius="sm"
+                fz="xs"
+                fs="italic"
+                color="blue"
+                variant="unstyled"
+                placeholder="Leave a comment"
+            />
         </Group>
     );
 }
@@ -177,17 +181,20 @@ const LoadingChatBox = ({ loadingMessage }: { loadingMessage: (string | null) })
         </Container >
     );
 }
-const SystemChatBox = ({ systemChat, settings, handleSubmit }: { systemChat: SystemChat, settings: Settings, handleSubmit: any }) => {
+const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setChatHistory, setSearchResults, setErrorMessage, setLoadingMessage }:
+    { systemChat: SystemChat, chatHistory: any, settings: Settings, handleSubmit: any, setChatHistory: any, setSearchResults: any, setErrorMessage: any, setLoadingMessage: any }) => {
     const citationRegex = /\[(\d+)\]/g;
     const theme = useMantineTheme();
     // const [searchResultsCopy, setSearchResultsCopy] = useState(systemChat.hits)
     const replaceCitationsWithLinks = (text: string) => {
+        let cleanedText = text.replace(/\[\${(\d+)}\]/g, "[$1]").replace(/\\n/g, "\n"); //handle escaped strings
+        console.log("Cleaned: ", cleanedText)
         const elements: React.ReactNode[] = new Array();
         var lastIndex = 0;
         if (text == null)
             return elements;
-        text.replace(citationRegex, (substring: string, citationNumberRaw: any, index: number) => {
-            elements.push(text.slice(lastIndex, index));
+        cleanedText.replace(citationRegex, (substring: string, citationNumberRaw: any, index: number) => {
+            elements.push(cleanedText.slice(lastIndex, index));
             const citationNumber = parseInt(citationNumberRaw)
             if (citationNumber >= 1 && citationNumber <= systemChat.hits.length) {
                 elements.push(
@@ -199,63 +206,158 @@ const SystemChatBox = ({ systemChat, settings, handleSubmit }: { systemChat: Sys
             lastIndex = index + substring.length;
             return substring;
         });
-        elements.push(text.slice(lastIndex));
+        elements.push(cleanedText.slice(lastIndex));
         return elements;
     };
     const filters = () => {
         if (systemChat.filterContent == null) {
             return null;
         }
+        const parsed = JSON.parse(systemChat.filterContent);
+        const removeButton = (
+            <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent">
+                <IconX size="xs" />
+            </ActionIcon>
+        );
         return (
-            <Container>
+            <Container mb="sm">
                 {
-                    Object.keys(systemChat.filterContent).map((filter: any) => {
-                        return (
-                            <Badge size="xs" key={filter} variant="filled" mr="xs" >{filter} {systemChat.filterContent[filter]}</Badge>
-                        )
+                    Object.keys(parsed).map((filter: any) => {
+                        if (parsed[filter] != "unknown") {
+                            return (
+                                <Badge size="xs" key={filter} p="xs" mr="xs" rightSection={removeButton}>
+                                    {filter} {parsed[filter]}
+                                </Badge>
+                            )
+                        }
+                        return null
                     }
                     )
                 }
-                {/* =======
-        const parsed = JSON.parse(systemChat.filterContent);
-        return (
-            <Container>
-                    {parsed["location"] !== "unknown" && (<Badge size="xs" variant="filled" mr="xs">{parsed["location"]}</Badge>)}
-                    {parsed["airplane_name"] !== "unknown" && (<Badge size="xs" variant="filled" color="pink" mr="xs">{parsed["airplane_name"]}</Badge>)}
-                    {parsed["date_start"] !== "unknown" && (<Badge size="xs" variant="filled" color="teal" mr="xs">{parsed["date_start"] + ' <= day'}</Badge>)}
-                    {parsed["date_end"] !== "unknown" && (<Badge size="xs" variant="filled" color="teal" mr="xs">{'day <= ' + parsed["date_end"]}</Badge>)}
->>>>>>> ntsb-filters */}
             </Container>
         )
     }
     // setTextNodes(replaceCitationsWithLinks(systemChat.response))
-    return (
-        <Card key={systemChat.id} ml={theme.spacing.xl} padding="lg" radius="md" bg="blue.0">
-            <Text size="sm" sx={{ "whiteSpace": "pre-wrap" }}>
-                {/* {textNodes} */}
-                {replaceCitationsWithLinks(systemChat.response)}
-            </Text>
-            {systemChat.ragPassageCount ?
-                <Container>
-                    <Divider size={"xs"} mt="md" mb="sm" />
+    const [editing, setEditing] = useState(false)
+    const [newQuestion, setNewQuestion] = useState(systemChat.queryUsed)
+    const [newFilterContent, setNewFilterContent] = useState(systemChat.filterContent)
+    const handleInputChange = (e: any) => {
+        setNewQuestion(e.target.value);
+    };
 
-                    <Text size="sm" fs="italic" fw="500" align='right'>
+    const handleInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            rerunQuery();
+        }
+    };
+
+    // rerun mechanism
+    const rerunQuery = async () => {
+        try {
+            setEditing(false);
+            setLoadingMessage("Processing query...")
+            const populateChatFromOs = (openSearchResults: any) => {
+                console.log("Main processor ", openSearchResults)
+                console.log("Main processor: OS results ", openSearchResults)
+                const endTime = new Date(Date.now());
+                const elpased = endTime.getTime() - startTime.getTime()
+                console.log("Main processor: OS took seconds: ", elpased)
+                const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
+                const newSystemChat = new SystemChat(
+                    {
+                        id: parsedOpenSearchResults.interactionId + "_system",
+                        interaction_id: parsedOpenSearchResults.interactionId,
+                        response: parsedOpenSearchResults.chatResponse,
+                        ragPassageCount: settings.ragPassageCount,
+                        modelName: settings.modelName,
+                        queryUsed: newQuestion,
+                        hits: parsedOpenSearchResults.documents,
+                        filterContent: newFilterContent
+                    });
+                setChatHistory([newSystemChat, ...chatHistory,]);
+            }
+
+
+            const clean = async (result: any) => {
+                const openSearchResponseAsync = result[0]
+                const query = result[1]
+                const openSearchResponse = await openSearchResponseAsync
+                let generatedAnswer = openSearchResponse.ext.retrieval_augmented_generation.answer
+                if (settings.simplify && openSearchResponse.hits.hits.length > 0) {
+                    console.log("Simplifying answer: ", generatedAnswer)
+                    generatedAnswer = await simplifyAnswer(newQuestion, generatedAnswer)
+                }
+                await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, generatedAnswer, query)
+                openSearchResponse.ext.retrieval_augmented_generation.answer = generatedAnswer
+                return openSearchResponse
+            }
+
+            const startTime = new Date(Date.now());
+            await Promise.all([
+                hybridConversationSearch(newQuestion, newQuestion, parseFilters(newFilterContent, setErrorMessage), settings.activeConversation, settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount)
+                    .then(clean).then(populateChatFromOs),
+            ]);
+        } finally {
+            setLoadingMessage(null)
+        }
+    }
+
+
+    return (
+        <Card key={systemChat.id} padding="lg" radius="md" sx={{ 'borderStyle': 'none none solid none', 'borderColor': '#eee;' }} >
+            <Group spacing="xs">
+                {editing ? <Group p="0">
+                    <ActionIcon size="xs" mr="0" >
+                        <IconX onClick={(v) => {
+                            setEditing(false);
+                            setNewQuestion(systemChat.queryUsed)
+                        }} />
+                    </ActionIcon>
+                    <ActionIcon size="xs" mr="0" color="green">
+                        <IconPlayerPlayFilled onClick={(v) => {
+                            rerunQuery()
+                        }} />
+                    </ActionIcon>
+
+                </Group> :
+                    <ActionIcon size="xs" mr="0" >
+                        <IconEdit onClick={(v) => setEditing(true)} />
+                    </ActionIcon>
+                }
+                {editing ? <TextInput variant="unstyled" w="90%" value={newQuestion} size="md" onKeyDown={handleInputKeyPress} onChange={handleInputChange}></TextInput> :
+                    <Text size="md" fw={500} p="xs" pl="0">
                         {systemChat.queryUsed}
                     </Text>
-                    <Text size="xs" color="dimmed" align='right'>
-                        RAG passage count: {systemChat.ragPassageCount} Model used: {systemChat.modelName}
-                    </Text></Container>
-                : null}
-            <Text fz="xs" fs="italic" color="dimmed" align='right'>
-                Interaction id: {systemChat.interaction_id ? systemChat.interaction_id : "[todo]"}
-            </Text>
+                }
 
-            <FeedbackButtons systemChat={systemChat} settings={settings} />
+            </Group>
             {
                 systemChat.filterContent ?
                     filters()
                     : null
             }
+            <Text size="sm" sx={{ "whiteSpace": "pre-wrap" }} color={editing ? "gray" : "black"} p="xs">
+                {/* {textNodes} */}
+                {replaceCitationsWithLinks(systemChat.response)}
+            </Text>
+            <DocList documents={systemChat.hits} settings={settings} docsLoading={false}></DocList>
+            {/* {systemChat.ragPassageCount ?
+                <Container>
+                    <Divider size={"xs"} mt="md" mb="sm" />
+
+                    <Text size="sm" fs="italic" fw="500">
+                        {systemChat.queryUsed}
+                    </Text>
+                    <Text size="xs" color="dimmed">
+                        RAG passage count: {systemChat.ragPassageCount} Model used: {systemChat.modelName}
+                    </Text></Container>
+                : null} */}
+            <Text fz="xs" fs="italic" color="dimmed" p="xs">
+                Interaction id: {systemChat.interaction_id ? systemChat.interaction_id : "[todo]"}
+            </Text>
+
+            <FeedbackButtons systemChat={systemChat} settings={settings} />
         </Card >
     );
 }
@@ -264,7 +366,7 @@ const UserChatBox = ({ id, interaction_id, query, rephrasedQuery }: UserChat) =>
     const theme = useMantineTheme();
 
     return (
-        <Card key={id} mr={theme.spacing.xl} padding="lg">
+        <Card key={id} padding="lg">
             <Text size="sm" fw={500}>
                 {query}
             </Text>{rephrasedQuery && rephrasedQuery != query ?
@@ -280,6 +382,7 @@ const UserChatBox = ({ id, interaction_id, query, rephrasedQuery }: UserChat) =>
 }
 
 function parseFilters(filterInputs: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
+    if (filterInputs == null) return null;
     let resultNeural: any = {
         "bool": {
             "filter": []
@@ -456,17 +559,18 @@ const simplifyAnswer = async (question: string, answer: string) => {
     }
 };
 
-export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchResults, streaming, setStreaming, setDocsLoading, setErrorMessage, settings }:
+export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchResults, streaming, setStreaming, setDocsLoading, setErrorMessage, settings, setSettings }:
     {
-        chatHistory: (UserChat | SystemChat)[], searchResults: SearchResultDocument[], setChatHistory: Dispatch<SetStateAction<any[]>>,
+        chatHistory: (SystemChat)[], searchResults: SearchResultDocument[], setChatHistory: Dispatch<SetStateAction<any[]>>,
         setSearchResults: Dispatch<SetStateAction<any[]>>, streaming: boolean, setStreaming: Dispatch<SetStateAction<boolean>>,
-        setDocsLoading: Dispatch<SetStateAction<boolean>>, setErrorMessage: Dispatch<SetStateAction<string | null>>, settings: Settings
+        setDocsLoading: Dispatch<SetStateAction<boolean>>, setErrorMessage: Dispatch<SetStateAction<string | null>>, settings: Settings, setSettings: any
     }) => {
     const theme = useMantineTheme();
     const chatInputRef = useRef<HTMLInputElement | null>(null);
     const [chatInput, setChatInput] = useState("");
     const [disableFilters, setDisableFilters] = useState(false);
-    const [disableRewriting, setDisableRewriting] = useState(true);
+    const [queryPlanner, setQueryPlanner] = useState(false);
+    const [questionRewriting, setQuestionRewriting] = useState(true);
     const [filtersInput, setFiltersInput] = useState<{ [key: string]: string }>({});
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
 
@@ -494,7 +598,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             let filters: any;
             let filterContent: any = null;
             if (!disableFilters) {
-                if (settings.auto_filter) {
+                if (queryPlanner) {
                     filterResponse = await getFilters(chatInput, settings.modelName)
                     console.log(filterResponse)
                     if (filterResponse.ok) {
@@ -514,7 +618,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             }
             console.log("Filters are: ", filters)
             let question: string = chatInput;
-            if (!disableRewriting) {
+            if (questionRewriting) {
                 setLoadingMessage("Rephrasing question with conversation context");
                 const rephraseQuestionResponse = await rephraseQuestion(chatInput, chatHistoryInteractions, settings.modelName)
                 // if (rephraseQuestionResponse.ok) {
@@ -554,12 +658,12 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                 console.log("Main processor: OS took seconds: ", elpased)
                 const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
                 // todo: replace these with interaction id
-                const newChat = new UserChat({
-                    id: parsedOpenSearchResults.interactionId + "_user",
-                    interaction_id: parsedOpenSearchResults.interactionId,
-                    query: chatInput,
-                    rephrasedQuery: question
-                });
+                // const newChat = new UserChat({
+                //     id: parsedOpenSearchResults.interactionId + "_user",
+                //     interaction_id: parsedOpenSearchResults.interactionId,
+                //     query: chatInput,
+                //     rephrasedQuery: question
+                // });
                 const newSystemChat = new SystemChat(
                     {
                         id: parsedOpenSearchResults.interactionId + "_system",
@@ -571,7 +675,8 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                         hits: parsedOpenSearchResults.documents,
                         filterContent: filterContent
                     });
-                setChatHistory([newSystemChat, newChat, ...chatHistory,]);
+                // setChatHistory([newSystemChat, newChat, ...chatHistory,]);
+                setChatHistory([newSystemChat, ...chatHistory,]);
             }
             const populateDocsFromOs = (openSearchResults: any) => {
                 console.log("Info separate processor ", openSearchResults)
@@ -587,7 +692,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             const startTime = new Date(Date.now());
             // const openSearchResults = await hybridConversationSearch(chatInput, rephrasedQuestion, settings.activeConversation, settings.openSearchIndex, settings.modelName, settings.ragPassageCount);
             await Promise.all([
-                hybridConversationSearchNoRag(question, filters, settings.openSearchIndex, settings.embeddingModel).then(populateDocsFromOs),
+                // hybridConversationSearchNoRag(question, filters, settings.openSearchIndex, settings.embeddingModel).then(populateDocsFromOs),
                 hybridConversationSearch(chatInput, question, filters, settings.activeConversation, settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount)
                     .then(clean).then(populateChatFromOs),
             ]);
@@ -629,32 +734,37 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
         chatInputRef.current?.focus();
     }, [streaming]);
     return (
-        <Flex direction="column" h="90vh" sx={{ 'borderStyle': 'none solid none none', 'borderColor': '#eee;' }}>
+        // <Flex direction="column" h="90vh" sx={{ 'borderStyle': 'none solid none none', 'borderColor': '#eee;' }}>
+        <Flex direction="column" h="90vh">
 
+            <Container p="md">
+                <form onSubmit={handleSubmit} className="input-form">
+                    <TextInput
+                        onKeyDown={handleInputKeyPress}
+                        onChange={handleInputChange}
+                        ref={chatInputRef}
+                        value={chatInput}
+                        icon={<IconSearch size="1.1rem" stroke={1.5} />}
+                        radius="xl"
+                        w="40em"
+                        autoFocus
+                        size="sm"
+                        fz="xs"
+                        p="sm"
+                        rightSection={
+                            <ActionIcon size={32} radius="xl" bg="#5688b0" variant="filled">
+                                <IconChevronRight size="1rem" stroke={2} onClick={handleSubmit} />
+                            </ActionIcon>
+                        }
+                        placeholder="Ask me anything"
+                        rightSectionWidth={42}
+                        disabled={settings.activeConversation == null}
+                    />
+                </form>
+            </Container>
             {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} disableFilters={disableFilters} /> : null}
-            <SearchControlPanel disableFilters={disableFilters} setDisableFilters={setDisableFilters} disableQuestionRewriting={disableRewriting} setDisableQuestionRewriting={setDisableRewriting}></SearchControlPanel>
-            <form onSubmit={handleSubmit} className="input-form">
-                <TextInput
-                    onKeyDown={handleInputKeyPress}
-                    onChange={handleInputChange}
-                    ref={chatInputRef}
-                    value={chatInput}
-                    icon={<IconSearch size="1.1rem" stroke={1.5} />}
-                    radius="xl"
-                    autoFocus
-                    size="sm"
-                    fz="xs"
-                    p="sm"
-                    rightSection={
-                        <ActionIcon size={32} radius="xl" bg="#5688b0" variant="filled">
-                            <IconChevronRight size="1rem" stroke={2} onClick={handleSubmit} />
-                        </ActionIcon>
-                    }
-                    placeholder="Ask me anything"
-                    rightSectionWidth={42}
-                    disabled={settings.activeConversation == null}
-                />
-            </form>
+            <SearchControlPanel disableFilters={disableFilters} setDisableFilters={setDisableFilters} questionRewriting={questionRewriting} setQuestionRewriting={setQuestionRewriting}
+                queryPlanner={queryPlanner} setQueryPlanner={setQueryPlanner} settings={settings}></SearchControlPanel>
             {/* <Center></Center> */}
             <Center>
                 <Text fz="xs" color="dimmed">
@@ -667,20 +777,22 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             <Center>
                 {streaming ? <Loader size="xs" variant="dots" m="md" /> : ""}
             </Center>
-            <ScrollArea.Autosize bg="white" p="md" mah="calc(90vh - 12rem);" mb="md">
-                <Stack>
+            {/* <ScrollArea.Autosize bg="white" p="md" mah="calc(90vh - 12rem);" mb="md"> */}
+            <Stack>
 
-                    {chatHistory.map((chat, index) => {
-                        if ('query' in chat) {
-                            return <UserChatBox key={chat.id + "_user"} id={chat.id} interaction_id={chat.interaction_id} query={chat.query} rephrasedQuery={chat.rephrasedQuery} />
-                        } else {
-                            return <SystemChatBox key={chat.id + "_system"} systemChat={chat} settings={settings} handleSubmit={handleSubmit} />
-                        }
-                    }
-                    )
-                    }
-                </Stack>
-            </ScrollArea.Autosize>
+                {chatHistory.map((chat, index) => {
+                    // if ('query' in chat) {
+                    // return <UserChatBox key={chat.id + "_user"} id={chat.id} interaction_id={chat.interaction_id} query={chat.query} rephrasedQuery={chat.rephrasedQuery} />
+                    // } else {
+                    return <SystemChatBox key={chat.id + "_system"} systemChat={chat} chatHistory={chatHistory} settings={settings} handleSubmit={handleSubmit}
+                        setChatHistory={setChatHistory} setSearchResults={setSearchResults} setErrorMessage={setErrorMessage}
+                        setLoadingMessage={setLoadingMessage} />
+                    // }
+                }
+                )
+                }
+            </Stack>
+            {/* </ScrollArea.Autosize> */}
 
         </Flex >
     );

@@ -39,7 +39,7 @@ export class SystemChat {
     modelName: string | null = "";
     response: string = "";
     hits: SearchResultDocument[] = new Array();
-    queryUsed: string | null = "";
+    queryUsed: string = "";
     feedback: boolean | null = null;
     comment: string = "";
     filterContent: any;
@@ -53,13 +53,13 @@ export class Settings {
     openSearchIndex: string = "";
     embeddingModel: string = "";
     ragPassageCount: number = 5;
-    modelName: string = "gpt-4-turbo-preview";
+    modelName: string = "gpt-3.5-turbo";
     modelId: string = "abScoYoBAwYohYvwjxcP";
     availableModels: string[] = ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo-preview"]
     activeConversation: string = "";
-    simplify: boolean = true;
+    simplify: boolean = false;
     auto_filter: boolean = false;
-    required_filters: string[] = ["_product_codes"];
+    required_filters: string[] = [];
 
     public constructor(init?: Partial<Settings>) {
         Object.assign(this, init);
