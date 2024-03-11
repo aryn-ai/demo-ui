@@ -236,6 +236,12 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
             setNewFilterContent(updatedNewFilterContent);
         };
 
+        const editFilter = (filterToEdit: any) => {
+            setNewFilterType(filterToEdit)
+            setNewFilterValue(newFilterContent[filterToEdit])
+            newFilterInputDialoghHandlers.open()
+        };
+
         const addFilter = () => {
 
             const handleSubmit = (e: React.FormEvent) => {
@@ -243,6 +249,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                 const updatedNewFilterContent = { ...newFilterContent }
                 updatedNewFilterContent[newFilterType] = newFilterValue
                 setNewFilterContent(updatedNewFilterContent);
+                newFilterInputDialoghHandlers.close()
             };
 
             const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,7 +260,6 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     handleSubmit(e);
-                    newFilterInputDialoghHandlers.close()
                 }
             };
 
@@ -261,7 +267,6 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                 <Modal opened={newFilterInputDialog} onClose={newFilterInputDialoghHandlers.close} title="Add filter" size="auto">
                     <Container p="md">
                         <NativeSelect
-                            // w="10rem"
                             value={newFilterType}
                             label="Field to filter on"
                             onChange={(event) => setNewFilterType(event.currentTarget.value)}
@@ -273,8 +278,8 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                             ]}
                         />
                         <TextInput
-                            // w="10rem"
                             label="Value of filter"
+                            value={newFilterValue}
                             onKeyDown={handleInputKeyPress}
                             onChange={handleInputChange}
                             autoFocus
@@ -291,10 +296,15 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
 
         };
 
-        const removeFilterButton = (filter: any) => (
-            <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => removeFilter(filter)}>
-                <IconX size="xs" />
-            </ActionIcon>
+        const editFiltersButtons = (filter: any) => (
+            <Group>
+                <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => removeFilter(filter)}>
+                    <IconX size="xs" />
+                </ActionIcon>
+                <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => editFilter(filter)}>
+                    <IconEdit size="xs" />
+                </ActionIcon>
+            </Group>
         );
 
         // const addFilterButton = () => (
@@ -327,7 +337,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                         Object.keys(newFilterContent).map((filter: any) => {
                             if (newFilterContent[filter] != "unknown") {
                                 return (
-                                    <Badge size="xs" key={filter} p="xs" mr="xs" rightSection={removeFilterButton(filter)} >
+                                    <Badge size="xs" key={filter} p="xs" mr="xs" rightSection={editFiltersButtons(filter)} >
                                         {filter} {newFilterContent[filter]}
                                     </Badge >
                                 )
