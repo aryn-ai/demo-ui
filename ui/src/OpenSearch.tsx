@@ -82,6 +82,7 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
         // }
     }
     if (filters != null) {
+        console.log("OS setting filters")
         if (query.query.hybrid.queries && query.query.hybrid.queries.length > 0 && query.query.hybrid.queries[0].bool) {
             //keyword
             query.query.hybrid.queries[0].bool.filter = filters["keyword"]
@@ -91,6 +92,7 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
             query.query.hybrid.queries[1].neural.embedding.filter = filters["neural"]
         }
     }
+    console.log("Built query", query)
     return query
 }
 

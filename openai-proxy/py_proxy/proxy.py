@@ -41,7 +41,7 @@ openai.api_key = OPENAI_API_KEY
 OPENAI_API_BASE = "https://api.openai.com"
 
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST", "localhost")
-OPENSEARCH_URL = f"http://{OPENSEARCH_HOST}:9200/"
+OPENSEARCH_URL = f"https://{OPENSEARCH_HOST}:9200/"
 
 UI_HOST = os.environ.get("LOAD_BALANCER", "localhost")
 UI_BASE = f"https://{UI_HOST}:3001"

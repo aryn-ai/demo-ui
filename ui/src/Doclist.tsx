@@ -1,5 +1,5 @@
 import React, { } from 'react';
-import { ActionIcon, Alert, Card, Container, Flex, Group, LoadingOverlay, NavLink, Badge, ScrollArea, Stack, Text, Title, useMantineTheme, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Card, Container, Flex, Group, LoadingOverlay, NavLink, Badge, ScrollArea, Stack, Text, Title, useMantineTheme, Tooltip, HoverCard, Anchor } from '@mantine/core';
 import { useHover } from '@mantine/hooks';
 import { IconInfoCircle, IconFileTypeHtml, IconLink, IconFileTypePdf } from '@tabler/icons-react';
 import { SearchResultDocument, Settings } from './Types';
@@ -39,35 +39,34 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
 
     return (
         <div ref={ref}>
-            <Tooltip label={document.title + " " + document.url + " "} position="top" offset={-20}>
-                <Card bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
-                    mb="sm">
-                    {document.title != "Untitled" ?
-                        <Group p="left" mb="0" >
-                            <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>{document.title}</Text>
+            <HoverCard width="60%" shadow="md" position='bottom'>
+                <HoverCard.Target>
+                    <Card bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
+                        mb="sm">
+                        {document.title != "Untitled" ?
+                            <Group p="left" mb="0" >
+                                <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>{document.title}</Text>
+                            </Group>
+                            : null
+                        }
+                        <Group
+                            p="md"
+                        >
+                            {icon()}
+                            <Text size="xs" color="gray.7">{filename}</Text>
                         </Group>
-                        : null
-                    }
-                    {/* <Group mb="sm" p="0">
-                    <Badge size="xs" variant="filled">{document.properties["entity"]["location"]}</Badge>
-                    <Badge size="xs" variant="filled" color="pink">{document.properties["entity"]["aircraft"]}</Badge>
-                    <Badge size="xs" variant="filled" color="teal">{document.properties["entity"]["dateAndTime"]}</Badge>
-                </Group> */}
-                    <Flex
-                        gap="sm"
-                        justify="flex-start"
-                        align="flex-start"
-                        direction="row"
-                        p="md"
-                    >
-                        {icon()}
-                        <Text size="xs" color="gray.7">{filename}</Text>
-                    </Flex>
-                    {/* <Text size="sm" color="gray.9">
-                    {snippet}...
-                </Text> */}
-                </Card >
-            </Tooltip>
+                    </Card >
+                </HoverCard.Target>
+                <HoverCard.Dropdown>
+                    <Container>
+                        <Title order={5}>{document.title}</Title>
+                        <Anchor href={document.url} target="_blank">
+                            <Text fz="xs">{document.url} </Text>
+                        </Anchor>
+                        <Text> {document.description}</Text>
+                    </Container>
+                </HoverCard.Dropdown>
+            </HoverCard>
         </div >
     );
 }
@@ -78,22 +77,10 @@ export const DocList = ({ documents, settings, docsLoading }: { documents: Searc
 
     return (
         <Container bg="white">
-            {/* <Container>
-                <Alert variant="light" color="green" title="Important" radius="md" icon={icon}>
-                    Always refer to the original source document to consider warnings and important notices.
-                </Alert>
-            </Container> */}
-            <ScrollArea.Autosize pb="0" w="20rem">
-                <Container>
+            <ScrollArea w="90%" sx={{ overflow: "visible" }}>
+                <Container sx={{ overflow: "visible" }}>
                     <LoadingOverlay visible={docsLoading} overlayBlur={2} />
-                    <Flex
-                        // bg="rgba(0, 0, 0, .3)"
-                        gap="sm"
-                        justify="flex-start"
-                        align="flex-start"
-                        direction="row"
-                        wrap="nowrap"
-                    >
+                    <Group noWrap>
                         {documents.map(document => (
                             < DocumentItem
                                 key={document.id + Math.random()}
@@ -102,9 +89,9 @@ export const DocList = ({ documents, settings, docsLoading }: { documents: Searc
                         )
                         )
                         }
-                    </Flex>
+                    </Group>
                 </Container>
-            </ScrollArea.Autosize>
+            </ScrollArea>
         </Container >
     );
 }

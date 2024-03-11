@@ -1,12 +1,13 @@
 import React from 'react';
 import { Dispatch, SetStateAction, useRef, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Card, Center, Chip, Container, Flex, Group, HoverCard, Loader, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
-import { IconSearch, IconChevronRight, IconLink, IconFileTypeHtml, IconFileTypePdf, IconX, IconEdit, IconPlayerPlayFilled } from '@tabler/icons-react';
+import { ActionIcon, Anchor, Badge, Button, Card, Center, Chip, Container, Flex, Group, HoverCard, Loader, Modal, NativeSelect, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
+import { IconSearch, IconChevronRight, IconLink, IconFileTypeHtml, IconFileTypePdf, IconX, IconEdit, IconPlayerPlayFilled, IconPlus } from '@tabler/icons-react';
 import { IconThumbUp, IconThumbUpFilled, IconThumbDown, IconThumbDownFilled } from '@tabler/icons-react';
 import { getFilters, rephraseQuestion } from './Llm';
 import { SearchResultDocument, Settings, SystemChat, UserChat } from './Types';
 import { hybridConversationSearch, updateInteractionAnswer, updateFeedback } from './OpenSearch';
 import { DocList } from './Doclist';
+import { useDisclosure } from '@mantine/hooks';
 
 const Citation = ({ document, citationNumber }: { document: SearchResultDocument, citationNumber: number }) => {
     const [doc, setDoc] = useState(document)
@@ -181,14 +182,18 @@ const LoadingChatBox = ({ loadingMessage }: { loadingMessage: (string | null) })
         </Container >
     );
 }
+
+/**
+ * This component manages an interaction effectively. It shows the question/answer/hits, and also supports the edit/resubmit functionality.
+ * All context here is lost when switching a conversation or refreshing the page.
+ */
 const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setChatHistory, setSearchResults, setErrorMessage, setLoadingMessage }:
     { systemChat: SystemChat, chatHistory: any, settings: Settings, handleSubmit: any, setChatHistory: any, setSearchResults: any, setErrorMessage: any, setLoadingMessage: any }) => {
     const citationRegex = /\[(\d+)\]/g;
     const theme = useMantineTheme();
-    // const [searchResultsCopy, setSearchResultsCopy] = useState(systemChat.hits)
+    console.log("Filter content is", systemChat.filterContent)
     const replaceCitationsWithLinks = (text: string) => {
         let cleanedText = text.replace(/\[\${(\d+)}\]/g, "[$1]").replace(/\\n/g, "\n"); //handle escaped strings
-        console.log("Cleaned: ", cleanedText)
         const elements: React.ReactNode[] = new Array();
         var lastIndex = 0;
         if (text == null)
@@ -209,38 +214,136 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
         elements.push(cleanedText.slice(lastIndex));
         return elements;
     };
+
+    // for editing
+    const [editing, setEditing] = useState(false)
+    const [newQuestion, setNewQuestion] = useState(systemChat.queryUsed)
+    const [newFilterContent, setNewFilterContent] = useState(systemChat.filterContent ?? {})
+    const [newFilterInputDialog, newFilterInputDialoghHandlers] = useDisclosure(false);
+
+    const [newFilterType, setNewFilterType] = useState("")
+    const [newFilterValue, setNewFilterValue] = useState("")
+
     const filters = () => {
-        if (systemChat.filterContent == null) {
+        if (systemChat.filterContent == null && !editing) {
             return null;
         }
-        const parsed = JSON.parse(systemChat.filterContent);
-        const removeButton = (
-            <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent">
+
+        const removeFilter = (filterToRemove: any) => {
+            console.log("Removing filter: ", filterToRemove)
+            const updatedNewFilterContent = { ...newFilterContent }
+            delete updatedNewFilterContent[filterToRemove];
+            setNewFilterContent(updatedNewFilterContent);
+        };
+
+        const addFilter = () => {
+
+            const handleSubmit = (e: React.FormEvent) => {
+                console.log("Adding filter", newFilterValue)
+                const updatedNewFilterContent = { ...newFilterContent }
+                updatedNewFilterContent[newFilterType] = newFilterValue
+                setNewFilterContent(updatedNewFilterContent);
+            };
+
+            const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                setNewFilterValue(e.target.value);
+            };
+
+            const handleInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSubmit(e);
+                    newFilterInputDialoghHandlers.close()
+                }
+            };
+
+            return (
+                <Modal opened={newFilterInputDialog} onClose={newFilterInputDialoghHandlers.close} title="Add filter" size="auto">
+                    <Container p="md">
+                        <NativeSelect
+                            // w="10rem"
+                            value={newFilterType}
+                            label="Field to filter on"
+                            onChange={(event) => setNewFilterType(event.currentTarget.value)}
+                            data={[
+                                { value: 'location', label: 'Location' },
+                                { value: 'airplane_name', label: 'Airplane type' },
+                                { value: 'date_start', label: 'Before' },
+                                { value: 'date_end', label: 'After' },
+                            ]}
+                        />
+                        <TextInput
+                            // w="10rem"
+                            label="Value of filter"
+                            onKeyDown={handleInputKeyPress}
+                            onChange={handleInputChange}
+                            autoFocus
+                            size="sm"
+                            fz="xs"
+                            placeholder="e.g. California"
+                        />
+                        <Button onClick={(e) => handleSubmit(e)}>
+                            Add filter
+                        </Button>
+                    </Container>
+                </Modal>
+            )
+
+        };
+
+        const removeFilterButton = (filter: any) => (
+            <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => removeFilter(filter)}>
                 <IconX size="xs" />
             </ActionIcon>
         );
-        return (
-            <Container mb="sm">
-                {
-                    Object.keys(parsed).map((filter: any) => {
-                        if (parsed[filter] != "unknown") {
-                            return (
-                                <Badge size="xs" key={filter} p="xs" mr="xs" rightSection={removeButton}>
-                                    {filter} {parsed[filter]}
-                                </Badge>
-                            )
+
+        // const addFilterButton = () => (
+
+        // );
+
+        if (!editing) {
+            return (
+                <Container mb="sm">
+                    {
+                        Object.keys(systemChat.filterContent).map((filter: any) => {
+                            if (systemChat.filterContent[filter] != "unknown") {
+                                return (
+                                    <Badge size="xs" key={filter} p="xs" mr="xs" >
+                                        {filter} {systemChat.filterContent[filter]}
+                                    </Badge>
+                                )
+                            }
                         }
-                        return null
+                        )
                     }
-                    )
-                }
-            </Container>
-        )
+                </Container >
+            )
+        } else {
+            return (
+
+                <Container mb="sm">
+                    {addFilter()}
+                    {
+                        Object.keys(newFilterContent).map((filter: any) => {
+                            if (newFilterContent[filter] != "unknown") {
+                                return (
+                                    <Badge size="xs" key={filter} p="xs" mr="xs" rightSection={removeFilterButton(filter)} >
+                                        {filter} {newFilterContent[filter]}
+                                    </Badge >
+                                )
+                            }
+                        }
+                        )
+                    }
+                    <Badge size="xs" key="newFilter" p="xs" mr="xs" >
+                        <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => newFilterInputDialoghHandlers.open()}>
+                            <IconPlus size="xs" />
+                        </ActionIcon>
+                    </Badge >
+                </Container >
+            )
+        }
     }
-    // setTextNodes(replaceCitationsWithLinks(systemChat.response))
-    const [editing, setEditing] = useState(false)
-    const [newQuestion, setNewQuestion] = useState(systemChat.queryUsed)
-    const [newFilterContent, setNewFilterContent] = useState(systemChat.filterContent)
     const handleInputChange = (e: any) => {
         setNewQuestion(e.target.value);
     };
@@ -258,6 +361,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
             setEditing(false);
             setLoadingMessage("Processing query...")
             const populateChatFromOs = (openSearchResults: any) => {
+                console.log("New filter content is", newFilterContent)
                 console.log("Main processor ", openSearchResults)
                 console.log("Main processor: OS results ", openSearchResults)
                 const endTime = new Date(Date.now());
@@ -305,7 +409,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
 
 
     return (
-        <Card key={systemChat.id} padding="lg" radius="md" sx={{ 'borderStyle': 'none none solid none', 'borderColor': '#eee;' }} >
+        <Card key={systemChat.id} padding="lg" radius="md" sx={{ 'borderStyle': 'none none solid none', 'borderColor': '#eee;', overflow: "visible" }} >
             <Group spacing="xs">
                 {editing ? <Group p="0">
                     <ActionIcon size="xs" mr="0" >
@@ -332,11 +436,9 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                 }
 
             </Group>
-            {
-                systemChat.filterContent ?
-                    filters()
-                    : null
-            }
+
+            {filters()}
+
             <Text size="sm" sx={{ "whiteSpace": "pre-wrap" }} color={editing ? "gray" : "black"} p="xs">
                 {/* {textNodes} */}
                 {replaceCitationsWithLinks(systemChat.response)}
@@ -394,17 +496,75 @@ function parseFilters(filterInputs: any, setErrorMessage: Dispatch<SetStateActio
         }
     }
     Object.entries(filterInputs).forEach(([filter, filterValue]) => {
+        if (filter == null || filter == "") return;
+        // ignore ntsb schema, handled separately below for auto filters
+        if (filter == "location" || filter == "airplane_name" || filter == "date_start" || filter == "date_end" || filterValue == "unknown") {
+            return
+        }
         resultNeural["bool"]["filter"].push({
-            "match_phrase": {
+            "match": {
                 [`properties.${filter}`]: filterValue
             }
         })
         resultKeyword["bool"]["filter"].push({
-            "match_phrase": {
+            "match": {
                 [`properties.${filter}.keyword`]: filterValue
             }
         })
     });
+
+
+    // for ntsb schema only
+    if (filterInputs["location"] != null && filterInputs["location"] !== "unknown") {
+        resultKeyword["bool"]["filter"].push({
+            "match": {
+                "properties.entity.location": filterInputs["location"]
+            }
+        })
+        resultNeural["bool"]["filter"].push({
+            "match": {
+                "properties.entity.location": filterInputs["location"]
+            }
+        })
+    }
+    if (filterInputs["airplane_name"] != null && filterInputs["airplane_name"] !== "unknown") {
+        resultKeyword["bool"]["filter"].push({
+            "match": {
+                "properties.entity.aircraft": filterInputs["airplane_name"]
+            }
+        })
+        resultNeural["bool"]["filter"].push({
+            "match": {
+                "properties.entity.aircraft": filterInputs["airplane_name"]
+            }
+        })
+    }
+
+    let range_query: any = {
+        "range": {
+            "properties.entity.day": {
+            }
+        }
+    }
+    if (filterInputs["date_start"] != null && filterInputs["date_start"] !== "unknown") {
+        range_query.range["properties.entity.day"].gte = filterInputs["date_start"]
+    }
+    if (filterInputs["date_end"] != null && filterInputs["date_end"] !== "unknown") {
+        range_query.range["properties.entity.day"].lte = filterInputs["date_end"]
+    }
+    if (range_query.range["properties.entity.day"].gte !== undefined
+        || range_query.range["properties.entity.day"].lte !== undefined) {
+
+        resultNeural.bool.filter.push(range_query)
+        let keywordRange = {
+            "range": {
+                "properties.entity.day.keyword": {
+                }
+            }
+        }
+        keywordRange.range["properties.entity.day.keyword"] = range_query["range"]["properties.entity.day"]
+        resultKeyword.bool.filter.push(keywordRange)
+    }
     const result = {
         "keyword": resultKeyword,
         "neural": resultNeural
@@ -413,75 +573,108 @@ function parseFilters(filterInputs: any, setErrorMessage: Dispatch<SetStateActio
 }
 
 
-function parseAutoFilters(filterResponse: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
-    if ((filterResponse.error !== undefined) &&
-        (filterResponse.error.type === 'timeout_exception')) {
-        const documents = new Array<SearchResultDocument>()
-        const chatResponse = "Timeout from OpenAI"
-        const interactionId = ""
-        setErrorMessage(chatResponse)
-        return null
-    }
-    console.log("Parsing raw filters", filterResponse)
-    try {
-        let found = false
-        const parsedObject = JSON.parse(filterResponse);
-        // location\n \
-        // 2. airplane_name\n \
-        // 3. date_start in yyyy - mm - dd\n \
-        // 4. date_end in yyyy - mm - dd\n
-        let result: any = {
-            "bool": {
-                "filter": []
-            }
-        }
-        // location
-        if (parsedObject["location"] != null && parsedObject["location"] !== "unknown") {
-            result["bool"]["filter"].push({
-                "match": {
-                    "properties.entity.location": parsedObject["location"]
-                }
-            })
-            found = true
-        }
-        // aircraft
-        if (parsedObject["airplane_name"] != null && parsedObject["airplane_name"] !== "unknown") {
-            result["bool"]["filter"].push({
-                "match": {
-                    "properties.entity.aircraft": parsedObject["airplane_name"]
-                }
-            })
-            found = true
-        }
+// function parseAutoFilters(filterResponse: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
+//     if ((filterResponse.error !== undefined) &&
+//         (filterResponse.error.type === 'timeout_exception')) {
+//         const documents = new Array<SearchResultDocument>()
+//         const chatResponse = "Timeout from OpenAI"
+//         const interactionId = ""
+//         setErrorMessage(chatResponse)
+//         return null
+//     }
+//     try {
+//         // let found = false
+//         const parsedObject = JSON.parse(filterResponse);
+//         return parseFilters(parsedObject, setErrorMessage)
+//     } catch (error) {
+//         console.error('Error parsing JSON:', error);
+//     }
+//     // console.log("Parsing raw filters", filterResponse)
+//     // try {
+//     //     let found = false
+//     //     const parsedObject = JSON.parse(filterResponse);
+//     //     // location\n \
+//     //     // 2. airplane_name\n \
+//     //     // 3. date_start in yyyy - mm - dd\n \
+//     //     // 4. date_end in yyyy - mm - dd\n
+//     //     let resultKeyword: any = {
+//     //         "bool": {
+//     //             "filter": []
+//     //         }
+//     //     }
+//     //     let resultNeural: any = {
+//     //         "bool": {
+//     //             "filter": []
+//     //         }
+//     //     }
+//     //     // location
+// if (parsedObject["location"] != null && parsedObject["location"] !== "unknown") {
+//     resultKeyword["bool"]["filter"].push({
+//         "match": {
+//             "properties.entity.location": parsedObject["location"]
+//         }
+//     })
+//     resultNeural["bool"]["filter"].push({
+//         "match": {
+//             "properties.entity.location": parsedObject["location"]
+//         }
+//     })
+//     found = true
+// }
+// // aircraft
+// if (parsedObject["airplane_name"] != null && parsedObject["airplane_name"] !== "unknown") {
+//     resultKeyword["bool"]["filter"].push({
+//         "match": {
+//             "properties.entity.aircraft": parsedObject["airplane_name"]
+//         }
+//     })
+//     resultNeural["bool"]["filter"].push({
+//         "match": {
+//             "properties.entity.aircraft": parsedObject["airplane_name"]
+//         }
+//     })
+//     found = true
+// }
 
-        // dateTime
+//     //     // dateTime
+//     //     let range_query: any = {
+//     //         "range": {
+//     //             "properties.entity.day": {
+//     //             }
+//     //         }
+//     //     }
+//     //     if (parsedObject["date_start"] != null && parsedObject["date_start"] !== "unknown") {
+//     //         range_query.range["properties.entity.day"].gte = parsedObject["date_start"]
+//     //     }
+//     //     if (parsedObject["date_end"] != null && parsedObject["date_end"] !== "unknown") {
+//     //         range_query.range["properties.entity.day"].lte = parsedObject["date_end"]
+//     //     }
+//     //     if (range_query.range["properties.entity.day"].gte !== undefined
+//     //         || range_query.range["properties.entity.day"].lte !== undefined) {
 
-        let range_query: any = {
-            "range": {
-                "properties.entity.day": {
-                }
-            }
-        }
-        if (parsedObject["date_start"] != null && parsedObject["date_start"] !== "unknown") {
-            range_query.range["properties.entity.day"].gte = parsedObject["date_start"]
-        }
-        if (parsedObject["date_end"] != null && parsedObject["date_end"] !== "unknown") {
-            range_query.range["properties.entity.day"].lte = parsedObject["date_end"]
-        }
-        if (range_query.range["properties.entity.day"].gte !== undefined
-            || range_query.range["properties.entity.day"].lte !== undefined) {
-            result.bool.filter.push(range_query)
-            found = true
-        }
-        console.log("Result filters are: ", result)
-        if (found) {
-            return result
-        } else return null
-    } catch (error) {
-        console.error('Error parsing JSON:', error);
-    }
-    return null
-}
+//     //         resultNeural.bool.filter.push(range_query)
+//     //         let keywordRange = {
+//     //             "range": {
+//     //                 "properties.entity.day.keyword": {
+//     //                 }
+//     //             }
+//     //         }
+//     //         keywordRange.range["properties.entity.day.keyword"] = range_query["range"]["properties.entity.day"]
+//     //         resultKeyword.bool.filter.push(keywordRange)
+//     //         found = true
+//     //     }
+//     //     if (found) {
+//     //         const resultWrapped = {
+//     //             "keyword": resultKeyword,
+//     //             "neural": resultNeural
+//     //         }
+//     //         return resultWrapped
+//     //     } else return null
+//     // } catch (error) {
+//     //     console.error('Error parsing JSON:', error);
+//     // }
+//     return null
+// }
 
 function parseOpenSearchResults(openSearchResponse: any, setErrorMessage: Dispatch<SetStateAction<string | null>>) {
     if ((openSearchResponse.error !== undefined) &&
@@ -603,8 +796,22 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                     console.log(filterResponse)
                     if (filterResponse.ok) {
                         const filterData = await filterResponse.json();
-                        filterContent = filterData.choices[0].message.content
-                        filters = parseAutoFilters(filterContent, setErrorMessage)
+                        const autoFilterRawResult = filterData.choices[0].message.content
+                        if ((autoFilterRawResult.error !== undefined) &&
+                            (autoFilterRawResult.error.type === 'timeout_exception')) {
+                            const documents = new Array<SearchResultDocument>()
+                            const chatResponse = "Timeout from OpenAI"
+                            const interactionId = ""
+                            setErrorMessage(chatResponse)
+                            return null
+                        }
+                        try {
+                            // let found = false
+                            filterContent = JSON.parse(autoFilterRawResult);
+                            filters = parseFilters(filterContent, setErrorMessage)
+                        } catch (error) {
+                            console.error('Error parsing JSON:', error);
+                        }
                     }
                 } else if (settings.required_filters.length > 0) {
                     filters = parseFilters(filtersInput, setErrorMessage)
