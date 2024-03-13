@@ -92,7 +92,6 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
             query.query.hybrid.queries[1].neural.embedding.filter = filters["neural"]
         }
     }
-    console.log("Built query", query)
     return query
 }
 

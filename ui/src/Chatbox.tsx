@@ -85,22 +85,8 @@ const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters }
         </Group>
     )
 }
-const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriting, setQuestionRewriting, queryPlanner, setQueryPlanner, chatHistory, setChatHistory, settings }:
-    { disableFilters: any, setDisableFilters: any, questionRewriting: any, setQuestionRewriting: any, queryPlanner: boolean, setQueryPlanner: any, chatHistory: any, setChatHistory: any, settings: Settings }) => {
-    const addNewQuery = () => {
-        const newSystemChat = new SystemChat(
-            {
-                id: "test_system",
-                queryUsed: "New user provided OpenSearch query",
-                rawQueryUsed: "",
-                rawResults: null,
-                interaction_id: "Adhoc, not stored in memory",
-                fromAdhoc: true,
-                editing: true,
-                hits: []
-            });
-        setChatHistory([newSystemChat, ...chatHistory,]);
-    }
+const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriting, setQuestionRewriting, queryPlanner, setQueryPlanner, chatHistory, setChatHistory, openSearchQueryEditorOpenedHandlers, settings }:
+    { disableFilters: any, setDisableFilters: any, questionRewriting: any, setQuestionRewriting: any, queryPlanner: boolean, setQueryPlanner: any, chatHistory: any, setChatHistory: any, openSearchQueryEditorOpenedHandlers: any, settings: Settings }) => {
     return (
         <Group position='center'>
             {((settings.required_filters.length > 0) ?
@@ -115,7 +101,7 @@ const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriti
                 Question rewriting
             </Chip>
 
-            <Button compact onClick={() => addNewQuery()} size="xs" fz="xs">
+            <Button compact onClick={() => openSearchQueryEditorOpenedHandlers.open()} size="xs" fz="xs">
                 New query
             </Button>
         </Group >
@@ -203,12 +189,87 @@ const LoadingChatBox = ({ loadingMessage }: { loadingMessage: (string | null) })
     );
 }
 
+
+const OpenSearchQueryEditor = ({ openSearchQueryEditorOpened, openSearchQueryEditorOpenedHandlers, currentOsQuery, currentOsUrl, setCurrentOsQuery, setCurrentOsUrl, setLoadingMessage, chatHistory, setChatHistory }:
+    { openSearchQueryEditorOpened: boolean, openSearchQueryEditorOpenedHandlers: any, currentOsQuery: string, currentOsUrl: string, setCurrentOsQuery: any, setCurrentOsUrl: any, setLoadingMessage: any, chatHistory: any, setChatHistory: any }) => {
+
+    const handleOsSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
+        runJsonQuery(currentOsQuery, currentOsUrl);
+    };
+
+
+    // json query run
+    const runJsonQuery = async (newOsJsonQuery: string, currentOsQueryUrl: string) => {
+        try {
+            // setEditing(false);
+            openSearchQueryEditorOpenedHandlers.close()
+            setLoadingMessage("Processing query...")
+
+            const query = JSON.parse(newOsJsonQuery)
+            const populateChatFromRawOsQuery = async (openSearchResults: any) => {
+                const openSearchResponse = await openSearchResults
+                // send question and OS results to LLM
+                const response = await interpretOsResult(newOsJsonQuery, JSON.stringify(openSearchResponse, null, 4))
+                const newSystemChat = new SystemChat(
+                    {
+                        id: Math.random().toString(36).substring(2, length + 2),
+                        response: response,
+                        queryUsed: "User provided OpenSearch query",
+                        rawQueryUsed: newOsJsonQuery,
+                        rawResults: openSearchResponse,
+                        interaction_id: "Adhoc, not stored in memory",
+                        hits: []
+                    });
+                setChatHistory([newSystemChat, ...chatHistory,]);
+            }
+            const startTime = new Date(Date.now());
+            await Promise.all([
+                openSearchCall(query, currentOsQueryUrl)
+                    .then(populateChatFromRawOsQuery),
+            ]);
+        } finally {
+            setLoadingMessage(null)
+        }
+    }
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setCurrentOsUrl(e.target.value);
+    };
+
+    return (
+        <Modal opened={openSearchQueryEditorOpened} onClose={openSearchQueryEditorOpenedHandlers.close} title="OpenSearch Query Editor" size="calc(80vw - 3rem)">
+            <Container p="md">
+                <Button fz="xs" size="xs" m="md" color="teal" leftIcon={<IconPlayerPlayFilled size="0.6rem" />} onClick={e => handleOsSubmit(e)} >
+                    Run
+                </Button>
+                <TextInput
+                    size="xs"
+                    value={currentOsUrl}
+                    onChange={handleInputChange}
+                    label="OpenSearch url"
+                    withAsterisk
+                />
+                <ScrollArea h="45rem">
+                    <JsonInput
+                        value={currentOsQuery}
+                        onChange={newValue => setCurrentOsQuery(newValue)}
+                        validationError="Invalid JSON"
+                        formatOnBlur
+                        autosize
+                        minRows={4}
+                    />
+                </ScrollArea>
+            </Container>
+        </Modal>
+    )
+};
+
 /**
  * This component manages an interaction effectively. It shows the question/answer/hits, and also supports the edit/resubmit functionality.
  * All context here is lost when switching a conversation or refreshing the page.
  */
-const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setChatHistory, setSearchResults, setErrorMessage, setLoadingMessage }:
-    { systemChat: SystemChat, chatHistory: any, settings: Settings, handleSubmit: any, setChatHistory: any, setSearchResults: any, setErrorMessage: any, setLoadingMessage: any }) => {
+const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setChatHistory, setSearchResults, setErrorMessage, setLoadingMessage, setCurrentOsQuery, setCurrentOsUrl, openSearchQueryEditorOpenedHandlers }:
+    { systemChat: SystemChat, chatHistory: any, settings: Settings, handleSubmit: any, setChatHistory: any, setSearchResults: any, setErrorMessage: any, setLoadingMessage: any, setCurrentOsQuery: any, setCurrentOsUrl: any, openSearchQueryEditorOpenedHandlers: any }) => {
     const citationRegex = /\[(\d+)\]/g;
     const theme = useMantineTheme();
     console.log("Filter content is", systemChat.filterContent)
@@ -246,38 +307,10 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
     const [newQuestion, setNewQuestion] = useState(systemChat.queryUsed)
     const [newFilterContent, setNewFilterContent] = useState(systemChat.filterContent ?? {})
     const [newFilterInputDialog, newFilterInputDialoghHandlers] = useDisclosure(false);
-    const [openSearchQueryEditorOpened, openSearchQueryEditorOpenedHandlers] = useDisclosure(false);
-    const [newOsQuery, setNewOsQuery] = useState(currentOsQuery)
 
     const [newFilterType, setNewFilterType] = useState("location")
     const [newFilterValue, setNewFilterValue] = useState("")
 
-    const openSearchQueryEditor = () => {
-
-        const handleOsSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
-            runJsonQuery(newOsQuery, url);
-        };
-
-        return (
-            <Modal opened={openSearchQueryEditorOpened} onClose={openSearchQueryEditorOpenedHandlers.close} title="OpenSearch Query Editor" size="calc(80vw - 3rem)">
-                <Container p="md">
-                    <Button fz="xs" size="xs" m="md" color="teal" leftIcon={<IconPlayerPlayFilled size="0.6rem" />} onClick={e => handleOsSubmit(e)} >
-                        Run
-                    </Button>
-                    <ScrollArea h="45rem">
-                        <JsonInput
-                            value={newOsQuery}
-                            onChange={newValue => setNewOsQuery(newValue)}
-                            validationError="Invalid JSON"
-                            formatOnBlur
-                            autosize
-                            minRows={4}
-                        />
-                    </ScrollArea>
-                </Container>
-            </Modal>
-        )
-    };
 
     const filters = () => {
         if (systemChat.filterContent == null && !editing) {
@@ -477,44 +510,6 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
         }
     }
 
-    // json query run
-    const runJsonQuery = async (newOsJsonQuery: string, currentOsQueryUrl: string) => {
-        try {
-            setEditing(false);
-            openSearchQueryEditorOpenedHandlers.close()
-            setLoadingMessage("Processing query...")
-
-            const query = JSON.parse(newOsJsonQuery)
-            const populateChatFromRawOsQuery = async (openSearchResults: any) => {
-                const openSearchResponse = await openSearchResults
-                // send question and OS results to LLM
-                const response = await interpretOsResult(newOsJsonQuery, JSON.stringify(openSearchResponse, null, 4))
-                const newSystemChat = new SystemChat(
-                    {
-                        id: "test_system",
-                        response: response,
-                        queryUsed: "User provided OpenSearch query",
-                        rawQueryUsed: newOsJsonQuery,
-                        rawResults: openSearchResponse,
-                        interaction_id: "Adhoc, not stored in memory",
-                        hits: []
-                    });
-                if (systemChat.fromAdhoc) {
-                    setChatHistory([newSystemChat, ...chatHistory.slice(0, -1),]);
-                } else {
-                    setChatHistory([newSystemChat, ...chatHistory,]);
-                }
-            }
-            const startTime = new Date(Date.now());
-            await Promise.all([
-                openSearchCall(query, currentOsQueryUrl)
-                    .then(populateChatFromRawOsQuery),
-            ]);
-        } finally {
-            setLoadingMessage(null)
-        }
-    }
-
 
     return (
         <Card key={systemChat.id} padding="lg" radius="md" sx={{ 'borderStyle': 'none none solid none', 'borderColor': '#eee;', overflow: "visible" }} >
@@ -540,7 +535,6 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
             </Group>
 
             {filters()}
-            {openSearchQueryEditor()}
 
             {editing ?
                 <Group p="md">
@@ -550,7 +544,12 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                     }} >
                         Run
                     </Button>
-                    <Button variant="light" color="teal" fz="xs" size="xs" onClick={() => openSearchQueryEditorOpenedHandlers.open()}>
+                    <Button variant="light" color="teal" fz="xs" size="xs" onClick={() => {
+                        setCurrentOsQuery(currentOsQuery)
+                        setCurrentOsUrl(url)
+                        openSearchQueryEditorOpenedHandlers.open()
+                    }
+                    }>
                         OpenSearch query editor
                     </Button>
                 </Group>
@@ -898,6 +897,9 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     const [questionRewriting, setQuestionRewriting] = useState(true);
     const [filtersInput, setFiltersInput] = useState<{ [key: string]: string }>({});
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
+    const [currentOsQuery, setCurrentOsQuery] = useState<string>("");
+    const [currentOsUrl, setCurrentOsUrl] = useState<string>("");
+    const [openSearchQueryEditorOpened, openSearchQueryEditorOpenedHandlers] = useDisclosure(false);
 
     // This method does all the search workflow execution
     const handleSubmitParallelDocLoad = async (e: React.FormEvent) => {
@@ -1075,7 +1077,16 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     return (
         // <Flex direction="column" h="90vh" sx={{ 'borderStyle': 'none solid none none', 'borderColor': '#eee;' }}>
         <Flex direction="column" h="90vh">
-
+            <OpenSearchQueryEditor
+                openSearchQueryEditorOpened={openSearchQueryEditorOpened}
+                openSearchQueryEditorOpenedHandlers={openSearchQueryEditorOpenedHandlers}
+                currentOsQuery={currentOsQuery}
+                currentOsUrl={currentOsUrl}
+                setCurrentOsQuery={setCurrentOsQuery}
+                setCurrentOsUrl={setCurrentOsUrl}
+                setLoadingMessage={setLoadingMessage}
+                chatHistory={chatHistory}
+                setChatHistory={setChatHistory} />
             <Container p="md">
                 <form onSubmit={handleSubmit} className="input-form">
                     <TextInput
@@ -1103,7 +1114,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             </Container>
             {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} disableFilters={disableFilters} /> : null}
             <SearchControlPanel disableFilters={disableFilters} setDisableFilters={setDisableFilters} questionRewriting={questionRewriting} setQuestionRewriting={setQuestionRewriting}
-                queryPlanner={queryPlanner} setQueryPlanner={setQueryPlanner} chatHistory={chatHistory} setChatHistory={setChatHistory} settings={settings}></SearchControlPanel>
+                queryPlanner={queryPlanner} setQueryPlanner={setQueryPlanner} chatHistory={chatHistory} setChatHistory={setChatHistory} openSearchQueryEditorOpenedHandlers={openSearchQueryEditorOpenedHandlers} settings={settings}></SearchControlPanel>
             {/* <Center></Center> */}
             <Center>
                 <Text fz="xs" color="dimmed">
@@ -1125,7 +1136,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
                     // } else {
                     return <SystemChatBox key={chat.id + "_system"} systemChat={chat} chatHistory={chatHistory} settings={settings} handleSubmit={handleSubmit}
                         setChatHistory={setChatHistory} setSearchResults={setSearchResults} setErrorMessage={setErrorMessage}
-                        setLoadingMessage={setLoadingMessage} />
+                        setLoadingMessage={setLoadingMessage} setCurrentOsQuery={setCurrentOsQuery} setCurrentOsUrl={setCurrentOsUrl} openSearchQueryEditorOpenedHandlers={openSearchQueryEditorOpenedHandlers} />
                     // }
                 }
                 )

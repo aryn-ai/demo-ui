@@ -256,9 +256,16 @@ doc_count does not mean number of crashes, do not reference the doc_count field.
         {"role": "system", "content": summarize_prompt},
         {"role": "user", "content": prompt}
     ]
-    open_ai_result = make_openai_call(messages)
-    cleaned_answer = open_ai_result.choices[0].message.content
+    try :
+        open_ai_result = make_openai_call(messages)
+        cleaned_answer = open_ai_result.choices[0].message.content
+    except openai.error.InvalidRequestError as e:
+        print(e)
+        if "This model's maximum context length is" in e.message:
+            return "Unable to summarize result from OpenSearch due to content size."
+        
     return cleaned_answer
+
 
 @app.route('/opensearch/<path:os_path>', methods=['GET','POST','PUT','DELETE','HEAD','OPTIONS'])
 def proxy_opensearch(os_path):
