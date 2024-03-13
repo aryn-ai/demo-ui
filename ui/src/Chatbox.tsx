@@ -1,13 +1,15 @@
 import React from 'react';
 import { Dispatch, SetStateAction, useRef, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Button, Card, Center, Chip, Container, Flex, Group, HoverCard, Loader, Modal, NativeSelect, Skeleton, Stack, Text, TextInput, useMantineTheme } from '@mantine/core';
+import { ActionIcon, Affix, Anchor, Badge, Button, Card, Center, Chip, Code, Container, Flex, Group, Header, HoverCard, JsonInput, Loader, Modal, NativeSelect, ScrollArea, Skeleton, Stack, Text, TextInput, Title, UnstyledButton, rem, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconChevronRight, IconLink, IconFileTypeHtml, IconFileTypePdf, IconX, IconEdit, IconPlayerPlayFilled, IconPlus } from '@tabler/icons-react';
 import { IconThumbUp, IconThumbUpFilled, IconThumbDown, IconThumbDownFilled } from '@tabler/icons-react';
 import { getFilters, rephraseQuestion } from './Llm';
 import { SearchResultDocument, Settings, SystemChat, UserChat } from './Types';
-import { hybridConversationSearch, updateInteractionAnswer, updateFeedback } from './OpenSearch';
+import { hybridConversationSearch, updateInteractionAnswer, updateFeedback, getHybridSearchQuery, openSearchCall, getHybridSearchNoRagQuery } from './OpenSearch';
 import { DocList } from './Doclist';
 import { useDisclosure } from '@mantine/hooks';
+import { Prism } from '@mantine/prism';
+
 
 const Citation = ({ document, citationNumber }: { document: SearchResultDocument, citationNumber: number }) => {
     const [doc, setDoc] = useState(document)
@@ -83,8 +85,22 @@ const FilterInput = ({ settings, filtersInput, setFiltersInput, disableFilters }
         </Group>
     )
 }
-const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriting, setQuestionRewriting, queryPlanner, setQueryPlanner, settings }:
-    { disableFilters: any, setDisableFilters: any, questionRewriting: any, setQuestionRewriting: any, queryPlanner: boolean, setQueryPlanner: any, settings: Settings }) => {
+const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriting, setQuestionRewriting, queryPlanner, setQueryPlanner, chatHistory, setChatHistory, settings }:
+    { disableFilters: any, setDisableFilters: any, questionRewriting: any, setQuestionRewriting: any, queryPlanner: boolean, setQueryPlanner: any, chatHistory: any, setChatHistory: any, settings: Settings }) => {
+    const addNewQuery = () => {
+        const newSystemChat = new SystemChat(
+            {
+                id: "test_system",
+                queryUsed: "New user provided OpenSearch query",
+                rawQueryUsed: "",
+                rawResults: null,
+                interaction_id: "Adhoc, not stored in memory",
+                fromAdhoc: true,
+                editing: true,
+                hits: []
+            });
+        setChatHistory([newSystemChat, ...chatHistory,]);
+    }
     return (
         <Group position='center'>
             {((settings.required_filters.length > 0) ?
@@ -93,11 +109,15 @@ const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriti
                 </Chip> : null)
             }
             <Chip key="queryPlanner" size="xs" checked={queryPlanner} onChange={() => setQueryPlanner(!queryPlanner)} variant="light">
-                Query planner
+                Auto-filters
             </Chip>
             <Chip key="questionRewriting" size="xs" checked={questionRewriting} onChange={() => setQuestionRewriting(!questionRewriting)} variant="light">
                 Question rewriting
             </Chip>
+
+            <Button compact onClick={() => addNewQuery()} size="xs" fz="xs">
+                New query
+            </Button>
         </Group >
     )
 }
@@ -216,13 +236,48 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
     };
 
     // for editing
-    const [editing, setEditing] = useState(false)
+    const { osQuery, url } = getHybridSearchNoRagQuery(systemChat.queryUsed, parseFilters(systemChat.filterContent ?? {}, setErrorMessage), settings.openSearchIndex, settings.embeddingModel)
+    const currentOsQuery = systemChat.rawQueryUsed != null && systemChat.rawQueryUsed != "" ? systemChat.rawQueryUsed : JSON.stringify(
+        osQuery,
+        null,
+        4
+    )
+    const [editing, setEditing] = useState(systemChat.editing)
     const [newQuestion, setNewQuestion] = useState(systemChat.queryUsed)
     const [newFilterContent, setNewFilterContent] = useState(systemChat.filterContent ?? {})
     const [newFilterInputDialog, newFilterInputDialoghHandlers] = useDisclosure(false);
+    const [openSearchQueryEditorOpened, openSearchQueryEditorOpenedHandlers] = useDisclosure(false);
+    const [newOsQuery, setNewOsQuery] = useState(currentOsQuery)
 
-    const [newFilterType, setNewFilterType] = useState("")
+    const [newFilterType, setNewFilterType] = useState("location")
     const [newFilterValue, setNewFilterValue] = useState("")
+
+    const openSearchQueryEditor = () => {
+
+        const handleOsSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
+            runJsonQuery(newOsQuery, url);
+        };
+
+        return (
+            <Modal opened={openSearchQueryEditorOpened} onClose={openSearchQueryEditorOpenedHandlers.close} title="OpenSearch Query Editor" size="calc(80vw - 3rem)">
+                <Container p="md">
+                    <Button fz="xs" size="xs" m="md" color="teal" leftIcon={<IconPlayerPlayFilled size="0.6rem" />} onClick={e => handleOsSubmit(e)} >
+                        Run
+                    </Button>
+                    <ScrollArea h="45rem">
+                        <JsonInput
+                            value={newOsQuery}
+                            onChange={newValue => setNewOsQuery(newValue)}
+                            validationError="Invalid JSON"
+                            formatOnBlur
+                            autosize
+                            minRows={4}
+                        />
+                    </ScrollArea>
+                </Container>
+            </Modal>
+        )
+    };
 
     const filters = () => {
         if (systemChat.filterContent == null && !editing) {
@@ -245,7 +300,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
         const addFilter = () => {
 
             const handleSubmit = (e: React.FormEvent) => {
-                console.log("Adding filter", newFilterValue)
+                console.log("Adding filter", newFilterType + " " + newFilterValue)
                 const updatedNewFilterContent = { ...newFilterContent }
                 updatedNewFilterContent[newFilterType] = newFilterValue
                 setNewFilterContent(updatedNewFilterContent);
@@ -297,12 +352,12 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
         };
 
         const editFiltersButtons = (filter: any) => (
-            <Group>
-                <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => removeFilter(filter)}>
-                    <IconX size="xs" />
-                </ActionIcon>
+            <Group position="right" spacing="0">
                 <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => editFilter(filter)}>
                     <IconEdit size="xs" />
+                </ActionIcon>
+                <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => removeFilter(filter)}>
+                    <IconX size="xs" />
                 </ActionIcon>
             </Group>
         );
@@ -319,7 +374,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                             if (systemChat.filterContent[filter] != "unknown") {
                                 return (
                                     <Badge size="xs" key={filter} p="xs" mr="xs" >
-                                        {filter} {systemChat.filterContent[filter]}
+                                        {filter}: {systemChat.filterContent[filter]}
                                     </Badge>
                                 )
                             }
@@ -338,18 +393,23 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                             if (newFilterContent[filter] != "unknown") {
                                 return (
                                     <Badge size="xs" key={filter} p="xs" mr="xs" rightSection={editFiltersButtons(filter)} >
-                                        {filter} {newFilterContent[filter]}
+                                        {filter}: {newFilterContent[filter]}
                                     </Badge >
                                 )
                             }
                         }
                         )
                     }
-                    <Badge size="xs" key="newFilter" p="xs" mr="xs" >
-                        <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent" onClick={() => newFilterInputDialoghHandlers.open()}>
-                            <IconPlus size="xs" />
-                        </ActionIcon>
-                    </Badge >
+                    <UnstyledButton onClick={() => newFilterInputDialoghHandlers.open()}>
+                        <Badge size="xs" key="newFilter" p="xs" mr="xs" onClick={() => newFilterInputDialoghHandlers.open()}>
+                            <Group>
+                                New filter
+                                <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent">
+                                    <IconPlus size="xs" />
+                                </ActionIcon>
+                            </Group>
+                        </Badge >
+                    </UnstyledButton>
                 </Container >
             )
         }
@@ -417,6 +477,44 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
         }
     }
 
+    // json query run
+    const runJsonQuery = async (newOsJsonQuery: string, currentOsQueryUrl: string) => {
+        try {
+            setEditing(false);
+            openSearchQueryEditorOpenedHandlers.close()
+            setLoadingMessage("Processing query...")
+
+            const query = JSON.parse(newOsJsonQuery)
+            const populateChatFromRawOsQuery = async (openSearchResults: any) => {
+                const openSearchResponse = await openSearchResults
+                // send question and OS results to LLM
+                const response = await interpretOsResult(newOsJsonQuery, JSON.stringify(openSearchResponse, null, 4))
+                const newSystemChat = new SystemChat(
+                    {
+                        id: "test_system",
+                        response: response,
+                        queryUsed: "User provided OpenSearch query",
+                        rawQueryUsed: newOsJsonQuery,
+                        rawResults: openSearchResponse,
+                        interaction_id: "Adhoc, not stored in memory",
+                        hits: []
+                    });
+                if (systemChat.fromAdhoc) {
+                    setChatHistory([newSystemChat, ...chatHistory.slice(0, -1),]);
+                } else {
+                    setChatHistory([newSystemChat, ...chatHistory,]);
+                }
+            }
+            const startTime = new Date(Date.now());
+            await Promise.all([
+                openSearchCall(query, currentOsQueryUrl)
+                    .then(populateChatFromRawOsQuery),
+            ]);
+        } finally {
+            setLoadingMessage(null)
+        }
+    }
+
 
     return (
         <Card key={systemChat.id} padding="lg" radius="md" sx={{ 'borderStyle': 'none none solid none', 'borderColor': '#eee;', overflow: "visible" }} >
@@ -428,12 +526,6 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                             setNewQuestion(systemChat.queryUsed)
                         }} />
                     </ActionIcon>
-                    <ActionIcon size="xs" mr="0" color="green">
-                        <IconPlayerPlayFilled onClick={(v) => {
-                            rerunQuery()
-                        }} />
-                    </ActionIcon>
-
                 </Group> :
                     <ActionIcon size="xs" mr="0" >
                         <IconEdit onClick={(v) => setEditing(true)} />
@@ -448,10 +540,35 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
             </Group>
 
             {filters()}
+            {openSearchQueryEditor()}
 
-            <Text size="sm" sx={{ "whiteSpace": "pre-wrap" }} color={editing ? "gray" : "black"} p="xs">
+            {editing ?
+                <Group p="md">
+
+                    <Button fz="xs" size="xs" color="teal" leftIcon={<IconPlayerPlayFilled size="0.6rem" />} onClick={(v) => {
+                        rerunQuery()
+                    }} >
+                        Run
+                    </Button>
+                    <Button variant="light" color="teal" fz="xs" size="xs" onClick={() => openSearchQueryEditorOpenedHandlers.open()}>
+                        OpenSearch query editor
+                    </Button>
+                </Group>
+
+                : null
+            }
+
+            <Text size="sm" sx={{ "whiteSpace": "pre-wrap" }} color={editing ? theme.colors.gray[4] : "black"} p="xs">
                 {/* {textNodes} */}
                 {replaceCitationsWithLinks(systemChat.response)}
+                {systemChat.rawResults != null ?
+                    <Container p="md">
+                        <Title order={5}>OpenSearch results</Title>
+                        <ScrollArea h="45rem">
+                            <Prism language="markdown">{JSON.stringify(systemChat.rawResults, null, 4)}</Prism>
+                        </ScrollArea>
+                    </Container>
+                    : null}
             </Text>
             <DocList documents={systemChat.hits} settings={settings} docsLoading={false}></DocList>
             {/* {systemChat.ragPassageCount ?
@@ -471,25 +588,6 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
 
             <FeedbackButtons systemChat={systemChat} settings={settings} />
         </Card >
-    );
-}
-
-const UserChatBox = ({ id, interaction_id, query, rephrasedQuery }: UserChat) => {
-    const theme = useMantineTheme();
-
-    return (
-        <Card key={id} padding="lg">
-            <Text size="sm" fw={500}>
-                {query}
-            </Text>{rephrasedQuery && rephrasedQuery != query ?
-                <Text fz="xs" fs="italic" color="dimmed">
-                    Rephrased question: {rephrasedQuery}
-                </Text>
-                : null}
-            <Text fz="xs" fs="italic" color="dimmed">
-                Interaction id: {interaction_id ? interaction_id : "[todo]"}
-            </Text>
-        </Card>
     );
 }
 
@@ -525,7 +623,7 @@ function parseFilters(filterInputs: any, setErrorMessage: Dispatch<SetStateActio
 
 
     // for ntsb schema only
-    if (filterInputs["location"] != null && filterInputs["location"] !== "unknown") {
+    if (filterInputs["location"] != null && filterInputs["location"] != "unknown") {
         resultKeyword["bool"]["filter"].push({
             "match": {
                 "properties.entity.location": filterInputs["location"]
@@ -762,6 +860,30 @@ const simplifyAnswer = async (question: string, answer: string) => {
     }
 };
 
+const interpretOsResult = async (question: string, os_result: string) => {
+    try {
+        const response = await fetch('/aryn/interpret_os_result', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                question: question,
+                os_result: os_result
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        console.log("Simplify response is:", response)
+        return response.text()
+    } catch (error) {
+        console.error('Error interpret_os_result through proxy:', error);
+        throw error;
+    }
+};
+
 export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchResults, streaming, setStreaming, setDocsLoading, setErrorMessage, settings, setSettings }:
     {
         chatHistory: (SystemChat)[], searchResults: SearchResultDocument[], setChatHistory: Dispatch<SetStateAction<any[]>>,
@@ -981,7 +1103,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
             </Container>
             {settings.required_filters.length > 0 ? <FilterInput settings={settings} filtersInput={filtersInput} setFiltersInput={setFiltersInput} disableFilters={disableFilters} /> : null}
             <SearchControlPanel disableFilters={disableFilters} setDisableFilters={setDisableFilters} questionRewriting={questionRewriting} setQuestionRewriting={setQuestionRewriting}
-                queryPlanner={queryPlanner} setQueryPlanner={setQueryPlanner} settings={settings}></SearchControlPanel>
+                queryPlanner={queryPlanner} setQueryPlanner={setQueryPlanner} chatHistory={chatHistory} setChatHistory={setChatHistory} settings={settings}></SearchControlPanel>
             {/* <Center></Center> */}
             <Center>
                 <Text fz="xs" color="dimmed">

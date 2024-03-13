@@ -97,12 +97,17 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
 }
 
 export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
-    let query = hybridSearch(rephrasedQuestion, filters, index_name, model_id)
-    const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
-    return openSearchCall(query, url)
+    const { osQuery, url } = getHybridSearchNoRagQuery(rephrasedQuestion, filters, index_name, model_id)
+    return openSearchCall(osQuery, url)
 }
 
-export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
+export const getHybridSearchNoRagQuery = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
+    let osQuery = hybridSearch(rephrasedQuestion, filters, index_name, model_id)
+    const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
+    return { osQuery, url }
+}
+
+export const getHybridSearchQuery = (question: string, rephrasedQuestion: string, filters: any, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
     let query: any = hybridSearch(rephrasedQuestion, filters, index_name, embeddingModel)
     query.ext = {
         "generative_qa_parameters": {
@@ -116,12 +121,18 @@ export const hybridConversationSearch = async (question: string, rephrasedQuesti
         //     }
         // }
     }
+    const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
+    return { query, url }
+}
+
+export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
+    const { query, url } = getHybridSearchQuery(question, rephrasedQuestion, filters, index_name, embeddingModel, llmModel, numDocs)
+
     if (await is2dot12plus() && false) {
         query.ext.generative_qa_parameters.memory_id = conversationId;
     } else {
         query.ext.generative_qa_parameters.conversation_id = conversationId;
     }
-    const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
 
     return [openSearchCall(query, url), query]
 }

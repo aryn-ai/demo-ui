@@ -41,17 +41,16 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
         <div ref={ref}>
             <HoverCard width="60%" shadow="md" position='bottom'>
                 <HoverCard.Target>
-                    <Card bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
+                    <Card h="7rem" w="auto" bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
                         mb="sm">
-                        {document.title != "Untitled" ?
-                            <Group p="left" mb="0" >
-                                <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>{document.title}</Text>
-                            </Group>
-                            : null
-                        }
-                        <Group
-                            p="md"
-                        >
+                        <Group p="xs" m="0" noWrap spacing="xs">
+                            <Badge size="xs" m="0" color="gray" variant="filled">{document.index}</Badge>
+                            <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>
+                                {document.title != "Untitled" ? document.title :
+                                    document.properties.entity.accidentNumber ?? "Untitled"}
+                            </Text>
+                        </Group>
+                        <Group p="xs" m="0" noWrap spacing="xs">
                             {icon()}
                             <Text size="xs" color="gray.7">{filename}</Text>
                         </Group>
@@ -63,6 +62,17 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
                         <Anchor href={document.url} target="_blank">
                             <Text fz="xs">{document.url} </Text>
                         </Anchor>
+                        <Group>
+                            {
+                                ["location", "aircraftType", "day"].map(key => {
+                                    if (document.properties.entity[key] != "None") return (
+                                        <Badge key={key} size="xs" variant="filled">
+                                            {key} {document.properties.entity[key]}
+                                        </Badge>
+                                    )
+                                })
+                            }
+                        </Group>
                         <Text> {document.description}</Text>
                     </Container>
                 </HoverCard.Dropdown>

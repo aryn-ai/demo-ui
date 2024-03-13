@@ -231,6 +231,35 @@ The answer can be found in search result [4]. To adjust the saf on your Super De
     cleaned_answer = open_ai_result.choices[0].message.content
     return cleaned_answer
 
+@app.route('/aryn/interpret_os_result', methods=['POST', 'OPTIONS'])
+def interpret_os_result():
+    if request.method == 'OPTIONS':
+        return optionsResp('POST')
+    
+    summarize_prompt = """
+The following is a result from an opensearch query which was correctly generated to answer a user question. Given a user question and this result, synthesize an answer
+doc_count does not mean number of crashes, do not reference the doc_count field.
+
+"""
+
+    question = request.json.get('question')
+    os_result = request.json.get('os_result')
+    prompt = f"""
+        
+    User question:
+    {question}
+
+    OpenSearch Query result:
+    {os_result}
+        """
+    messages = [
+        {"role": "system", "content": summarize_prompt},
+        {"role": "user", "content": prompt}
+    ]
+    open_ai_result = make_openai_call(messages)
+    cleaned_answer = open_ai_result.choices[0].message.content
+    return cleaned_answer
+
 @app.route('/opensearch/<path:os_path>', methods=['GET','POST','PUT','DELETE','HEAD','OPTIONS'])
 def proxy_opensearch(os_path):
     if request.method == 'OPTIONS':

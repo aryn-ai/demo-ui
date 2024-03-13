@@ -40,7 +40,11 @@ export class SystemChat {
     response: string = "";
     hits: SearchResultDocument[] = new Array();
     queryUsed: string = "";
+    rawQueryUsed: string = "";
+    rawResults: any = null;
     feedback: boolean | null = null;
+    fromAdhoc: boolean = false;
+    editing: boolean = false;
     comment: string = "";
     filterContent: any;
 
