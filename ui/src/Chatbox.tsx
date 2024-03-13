@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Dispatch, SetStateAction, useRef, useState } from 'react';
 import { ActionIcon, Affix, Anchor, Badge, Button, Card, Center, Chip, Code, Container, Flex, Group, Header, HoverCard, JsonInput, Loader, Modal, NativeSelect, ScrollArea, Skeleton, Stack, Text, TextInput, Title, UnstyledButton, rem, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconChevronRight, IconLink, IconFileTypeHtml, IconFileTypePdf, IconX, IconEdit, IconPlayerPlayFilled, IconPlus } from '@tabler/icons-react';
@@ -216,8 +216,10 @@ const OpenSearchQueryEditor = ({ openSearchQueryEditorOpened, openSearchQueryEdi
                         response: response,
                         queryUsed: "User provided OpenSearch query",
                         rawQueryUsed: newOsJsonQuery,
+                        queryUrl: currentOsQueryUrl,
                         rawResults: openSearchResponse,
                         interaction_id: "Adhoc, not stored in memory",
+                        editing: false,
                         hits: []
                     });
                 setChatHistory([newSystemChat, ...chatHistory,]);
@@ -236,24 +238,38 @@ const OpenSearchQueryEditor = ({ openSearchQueryEditorOpened, openSearchQueryEdi
         setCurrentOsUrl(e.target.value);
     };
 
+    const jsonPlaceholder = {
+        "query": {
+            "match_all": {}
+        },
+        "size": 300
+    }
     return (
         <Modal opened={openSearchQueryEditorOpened} onClose={openSearchQueryEditorOpenedHandlers.close} title="OpenSearch Query Editor" size="calc(80vw - 3rem)">
             <Container p="md">
-                <Button fz="xs" size="xs" m="md" color="teal" leftIcon={<IconPlayerPlayFilled size="0.6rem" />} onClick={e => handleOsSubmit(e)} >
-                    Run
-                </Button>
-                <TextInput
-                    size="xs"
-                    value={currentOsUrl}
-                    onChange={handleInputChange}
-                    label="OpenSearch url"
-                    withAsterisk
-                />
+
+                <Text fz="xs" p="sm">Note: If you want a RAG answer, make sure the search pipeline is being used.
+                    Ensure it's configured in the URL (search_pipeline=hybrid_rag_pipeline), and also in the query itself (ext.generative_qa_parameters parameters)</Text>
+                <Group position="apart" grow>
+                    <TextInput
+                        size="xs"
+                        value={currentOsUrl}
+                        onChange={handleInputChange}
+                        label="OpenSearch url"
+                        placeholder='e.g. /opensearch/myindex/_search?'
+                        p="sm"
+                        withAsterisk
+                    />
+                    <Button maw="5rem" fz="xs" size="xs" m="md" color="teal" leftIcon={<IconPlayerPlayFilled size="0.6rem" />} onClick={e => handleOsSubmit(e)} >
+                        Run
+                    </Button>
+                </Group>
                 <ScrollArea h="45rem">
                     <JsonInput
                         value={currentOsQuery}
                         onChange={newValue => setCurrentOsQuery(newValue)}
                         validationError="Invalid JSON"
+                        placeholder={"e.g.\n" + JSON.stringify(jsonPlaceholder, null, 4)}
                         formatOnBlur
                         autosize
                         minRows={4}
@@ -297,9 +313,10 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
     };
 
     // for editing
-    const { osQuery, url } = getHybridSearchNoRagQuery(systemChat.queryUsed, parseFilters(systemChat.filterContent ?? {}, setErrorMessage), settings.openSearchIndex, settings.embeddingModel)
+    const { query, url } = getHybridSearchQuery(systemChat.queryUsed, systemChat.queryUsed, parseFilters(systemChat.filterContent ?? {}, setErrorMessage), settings.openSearchIndex, settings.embeddingModel, settings.modelName, settings.ragPassageCount)
+    const queryUrl = systemChat.queryUrl != "" ? systemChat.queryUrl : url
     const currentOsQuery = systemChat.rawQueryUsed != null && systemChat.rawQueryUsed != "" ? systemChat.rawQueryUsed : JSON.stringify(
-        osQuery,
+        query,
         null,
         4
     )
@@ -434,7 +451,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                         )
                     }
                     <UnstyledButton onClick={() => newFilterInputDialoghHandlers.open()}>
-                        <Badge size="xs" key="newFilter" p="xs" mr="xs" onClick={() => newFilterInputDialoghHandlers.open()}>
+                        <Badge size="xs" key="newFilter" p="xs" mr="xs" onClick={() => { setEditing(false); newFilterInputDialoghHandlers.open() }}>
                             <Group>
                                 New filter
                                 <ActionIcon size="0.8rem" color="blue" radius="md" variant="transparent">
@@ -463,14 +480,14 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
         try {
             setEditing(false);
             setLoadingMessage("Processing query...")
-            const populateChatFromOs = (openSearchResults: any) => {
+            const populateChatFromOs = ({ openSearchResponse, query }: { openSearchResponse: any, query: any }) => {
                 console.log("New filter content is", newFilterContent)
-                console.log("Main processor ", openSearchResults)
-                console.log("Main processor: OS results ", openSearchResults)
+                console.log("Main processor ", openSearchResponse)
+                console.log("Main processor: OS results ", openSearchResponse)
                 const endTime = new Date(Date.now());
                 const elpased = endTime.getTime() - startTime.getTime()
                 console.log("Main processor: OS took seconds: ", elpased)
-                const parsedOpenSearchResults = parseOpenSearchResults(openSearchResults, setErrorMessage)
+                const parsedOpenSearchResults = parseOpenSearchResults(openSearchResponse, setErrorMessage)
                 const newSystemChat = new SystemChat(
                     {
                         id: parsedOpenSearchResults.interactionId + "_system",
@@ -478,6 +495,8 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                         response: parsedOpenSearchResults.chatResponse,
                         ragPassageCount: settings.ragPassageCount,
                         modelName: settings.modelName,
+                        rawQueryUsed: JSON.stringify(query, null, 4),
+                        queryUrl: queryUrl,
                         queryUsed: newQuestion,
                         hits: parsedOpenSearchResults.documents,
                         filterContent: newFilterContent
@@ -497,7 +516,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                 }
                 await updateInteractionAnswer(openSearchResponse.ext.retrieval_augmented_generation.interaction_id, generatedAnswer, query)
                 openSearchResponse.ext.retrieval_augmented_generation.answer = generatedAnswer
-                return openSearchResponse
+                return { openSearchResponse, query }
             }
 
             const startTime = new Date(Date.now());
@@ -546,7 +565,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
                     </Button>
                     <Button variant="light" color="teal" fz="xs" size="xs" onClick={() => {
                         setCurrentOsQuery(currentOsQuery)
-                        setCurrentOsUrl(url)
+                        setCurrentOsUrl(queryUrl)
                         openSearchQueryEditorOpenedHandlers.open()
                     }
                     }>
@@ -898,8 +917,12 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     const [filtersInput, setFiltersInput] = useState<{ [key: string]: string }>({});
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [currentOsQuery, setCurrentOsQuery] = useState<string>("");
-    const [currentOsUrl, setCurrentOsUrl] = useState<string>("");
+    const [currentOsUrl, setCurrentOsUrl] = useState<string>("/opensearch/" + settings.openSearchIndex + "/_search?");
     const [openSearchQueryEditorOpened, openSearchQueryEditorOpenedHandlers] = useDisclosure(false);
+
+    useEffect(() => {
+        setCurrentOsUrl("/opensearch/" + settings.openSearchIndex + "/_search?");
+    }, [settings.openSearchIndex]);
 
     // This method does all the search workflow execution
     const handleSubmitParallelDocLoad = async (e: React.FormEvent) => {

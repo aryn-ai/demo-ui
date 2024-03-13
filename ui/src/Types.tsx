@@ -42,6 +42,7 @@ export class SystemChat {
     queryUsed: string = "";
     rawQueryUsed: string = "";
     rawResults: any = null;
+    queryUrl: string = "";
     feedback: boolean | null = null;
     fromAdhoc: boolean = false;
     editing: boolean = false;

@@ -238,7 +238,7 @@ def interpret_os_result():
     
     summarize_prompt = """
 The following is a result from an opensearch query which was correctly generated to answer a user question. Given a user question and this result, synthesize an answer
-doc_count does not mean number of crashes, do not reference the doc_count field.
+doc_count does not mean number of crashes but instead number of references in the indexed documents, do not reference the doc_count field.
 
 """
 
@@ -261,7 +261,7 @@ doc_count does not mean number of crashes, do not reference the doc_count field.
         cleaned_answer = open_ai_result.choices[0].message.content
     except openai.error.InvalidRequestError as e:
         print(e)
-        if "This model's maximum context length is" in e.message:
+        if "This model's maximum context length is" in e.args[0]:
             return "Unable to summarize result from OpenSearch due to content size."
         
     return cleaned_answer
