@@ -210,6 +210,7 @@ const OpenSearchQueryEditor = ({ openSearchQueryEditorOpened, openSearchQueryEdi
                 const openSearchResponse = await openSearchResults
                 // send question and OS results to LLM
                 const response = await interpretOsResult(newOsJsonQuery, JSON.stringify(openSearchResponse, null, 4))
+                var length = 10
                 const newSystemChat = new SystemChat(
                     {
                         id: Math.random().toString(36).substring(2, length + 2),
