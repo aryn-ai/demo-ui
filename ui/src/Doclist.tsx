@@ -41,18 +41,18 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
         <div ref={ref}>
             <HoverCard width="60%" shadow="md" position='bottom'>
                 <HoverCard.Target>
-                    <Card h="7rem" w="auto" bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
+                    <Card mah="8rem" maw="20rem" w="auto" bg={hovered ? theme.colors.gray[1] : theme.colors.gray[0]} ml={theme.spacing.md} sx={{ cursor: 'pointer' }} shadow={hovered ? 'md' : 'none'} component="a" onClick={() => { openDocument() }} target="_blank"
                         mb="sm">
-                        <Group p="xs" m="0" noWrap spacing="xs">
-                            <Badge size="xs" m="0" color="gray" variant="filled">{document.index}</Badge>
-                            <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]}>
+                        <Group p="xs" noWrap spacing="xs">
+                            <Badge size="xs" color="gray" variant="filled" sx={{ overflow: "visible" }} > {document.index}</Badge>
+                            <Text size="sm" c={hovered ? theme.colors.blue[8] : theme.colors.dark[8]} truncate>
                                 {document.title != "Untitled" ? document.title :
                                     document.properties.entity.accidentNumber ?? "Untitled"}
                             </Text>
                         </Group>
-                        <Group p="xs" m="0" noWrap spacing="xs">
+                        <Group p="xs" noWrap spacing="xs">
                             {icon()}
-                            <Text size="xs" color="gray.7">{filename}</Text>
+                            <Text size="xs" color="gray.7" truncate>{filename}</Text>
                         </Group>
                     </Card >
                 </HoverCard.Target>
@@ -64,13 +64,13 @@ const DocumentItem = ({ document }: { document: SearchResultDocument }) => {
                         </Anchor>
                         <Group>
                             {
-                                ["location", "aircraftType", "day"].map(key => {
+                                "entity" in document.properties ? ["location", "aircraftType", "day"].map(key => {
                                     if (document.properties.entity[key] != "None") return (
                                         <Badge key={key} size="xs" variant="filled">
                                             {key} {document.properties.entity[key]}
                                         </Badge>
                                     )
-                                })
+                                }) : null
                             }
                         </Group>
                         <Text> {document.description}</Text>

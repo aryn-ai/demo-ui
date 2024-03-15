@@ -23,12 +23,6 @@ const getOpenSearchVersion = async () => {
     }
 }
 
-export const is2dot12plus = async () => {
-    const version = await getOpenSearchVersion();
-    console.log("opensearch version: " + version)
-    return semverGTE(version, "2.12.0");
-}
-
 export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
     let query =
     {
@@ -106,19 +100,22 @@ export const getHybridSearchNoRagQuery = (rephrasedQuestion: string, filters: an
     return { osQuery, url }
 }
 
-export const getHybridSearchQuery = (question: string, rephrasedQuestion: string, filters: any, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
+export const getHybridSearchQuery = (question: string, rephrasedQuestion: string, filters: any, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7, rerank: boolean = false) => {
     let query: any = hybridSearch(rephrasedQuestion, filters, index_name, embeddingModel)
     query.ext = {
         "generative_qa_parameters": {
             "llm_question": question,
             "context_size": numDocs,
             "llm_model": llmModel,
-        },
-        // "rerank": {
-        //     "query_context": {
-        //         "query_text": rephrasedQuestion
-        //     }
-        // }
+        }
+    }
+    if (rerank) {
+        query.ext.generative_qa_parameters["rerank"] = {
+            "query_context": {
+                "query_text": rephrasedQuestion
+            }
+        }
+
     }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
     return { query, url }
@@ -127,11 +124,7 @@ export const getHybridSearchQuery = (question: string, rephrasedQuestion: string
 export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
     const { query, url } = getHybridSearchQuery(question, rephrasedQuestion, filters, index_name, embeddingModel, llmModel, numDocs)
 
-    if (await is2dot12plus() && false) {
-        query.ext.generative_qa_parameters.memory_id = conversationId;
-    } else {
-        query.ext.generative_qa_parameters.conversation_id = conversationId;
-    }
+    query.ext.generative_qa_parameters.memory_id = conversationId;
 
     return [openSearchCall(query, url), query]
 }
@@ -178,60 +171,32 @@ export const createConversation = async (conversationId: string) => {
         "name": conversationId
     }
     let url;
-    if (await is2dot12plus()) {
-        url = "/opensearch/_plugins/_ml/memory/"
-    } else {
-        url = "/opensearch/_plugins/_ml/memory/conversation"
-    }
+    url = "/opensearch/_plugins/_ml/memory/"
     return openSearchCall(body, url)
 }
 export const getInteractions = async (conversationId: any) => {
-    if (await is2dot12plus()) {
-        const url = "/opensearch/_plugins/_ml/memory/" + conversationId + "/_search"
-        const body = {
-            "query": {
-                "match_all": {}
-            },
-            "sort": [
-                {
-                    "create_time": {
-                        "order": "DESC"
-                    }
+    const url = "/opensearch/_plugins/_ml/memory/" + conversationId + "/_search"
+    const body = {
+        "query": {
+            "match_all": {}
+        },
+        "sort": [
+            {
+                "create_time": {
+                    "order": "DESC"
                 }
-            ]
-        }
-        return openSearchCall(body, url)
-    } else {
-        const url = "/opensearch/_plugins/_ml/memory/conversation/" + conversationId
-        return openSearchNoBodyCall(url)
+            }
+        ]
     }
+    return openSearchCall(body, url)
 }
 export const getConversations = async () => {
-    let url;
-    if (await is2dot12plus()) {
-        url = "/opensearch/_plugins/_ml/memory/"
-    } else {
-        url = "/opensearch/_plugins/_ml/memory/conversation/"
-    }
+    const url = "/opensearch/_plugins/_ml/memory/"
     return openSearchNoBodyCall(url)
 }
 export const deleteConversation = async (conversation_id: string) => {
     console.log("Going to delete", conversation_id)
-    let url;
-    if (await is2dot12plus()) {
-        url = "/opensearch/_plugins/_ml/memory/" + conversation_id
-    } else {
-        url = "/opensearch/_plugins/_ml/memory/conversation/" + conversation_id
-        // hack for empty conversation delete:
-        const body = {
-            input: "",
-            prompt_template: "",
-            response: ""
-        }
-        console.log("Adding interaction")
-        const addCall = await openSearchCall(body, url)
-        await addCall
-    }
+    const url = "/opensearch/_plugins/_ml/memory/" + conversation_id
     console.log("Now deleting")
     return openSearchNoBodyCall(url, "DELETE")
 }

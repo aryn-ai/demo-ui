@@ -94,9 +94,12 @@ const SearchControlPanel = ({ disableFilters, setDisableFilters, questionRewriti
                     Filters
                 </Chip> : null)
             }
-            <Chip key="queryPlanner" size="xs" checked={queryPlanner} onChange={() => setQueryPlanner(!queryPlanner)} variant="light">
-                Auto-filters
-            </Chip>
+            {
+                settings.auto_filter ?
+                    <Chip key="queryPlanner" size="xs" checked={queryPlanner} onChange={() => setQueryPlanner(!queryPlanner)} variant="light">
+                        Auto-filters
+                    </Chip> : null
+            }
             <Chip key="questionRewriting" size="xs" checked={questionRewriting} onChange={() => setQuestionRewriting(!questionRewriting)} variant="light">
                 Question rewriting
             </Chip>
@@ -554,7 +557,7 @@ const SystemChatBox = ({ systemChat, chatHistory, settings, handleSubmit, setCha
 
             </Group>
 
-            {filters()}
+            {settings.auto_filter ? filters() : null}
 
             {editing ?
                 <Group p="md">
@@ -914,7 +917,7 @@ export const ChatBox = ({ chatHistory, searchResults, setChatHistory, setSearchR
     const [chatInput, setChatInput] = useState("");
     const [disableFilters, setDisableFilters] = useState(false);
     const [queryPlanner, setQueryPlanner] = useState(false);
-    const [questionRewriting, setQuestionRewriting] = useState(true);
+    const [questionRewriting, setQuestionRewriting] = useState(false);
     const [filtersInput, setFiltersInput] = useState<{ [key: string]: string }>({});
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [currentOsQuery, setCurrentOsQuery] = useState<string>("");
