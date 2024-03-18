@@ -140,9 +140,9 @@ def proxy():
         download_name = download_name
     )
 
-def make_openai_call(messages):
+def make_openai_call(messages, model_id="gpt-4"):
     response = openai.ChatCompletion.create(
-      model="gpt-4",
+      model=model_id,
       messages=messages,
       temperature=0.0,
       stream=False
@@ -209,7 +209,7 @@ To adjust sag on your Super Deluxe Coil, follow these steps:
 5. If your target sag percentage is not achieved, spring preload adjustment and/or coil spring replacement must be performed.
 
 Answer:
-The answer can be found in search result [4]. To adjust the saf on your Super Deluxe Coil, you will need to install a coil spring and spring retainer, followed by some additional adjustments.
+The answer can be found in search result [4]. To adjust the sag on your Super Deluxe Coil, you will need to install a coil spring and spring retainer, followed by some additional adjustments.
 
 """
 

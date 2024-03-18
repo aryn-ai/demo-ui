@@ -1,30 +1,11 @@
-import semverGTE from "semver/functions/gte";
-import { Mutex } from "async-mutex";
-
 const SOURCES = ["type", "_id", "doc_id", "properties", "title", "text_representation", "bbox"]
 const SEARCH_PIPELINE = "hybrid_rag_pipeline"
 const NO_RAG_SEARCH_PIPELINE = "hybrid_pipeline"
 export const FEEDBACK_INDEX_NAME = "feedback"
-// access with getOpenSearchVersion
-const OS_VERSION_OBJ: { osVersion: string } = { osVersion: "" }
 
 
-const getOpenSearchVersion = async () => {
-    if (OS_VERSION_OBJ.osVersion.length === 0) {
-        const response = await fetch("/opensearch-version");
-        if (response.ok) {
-            OS_VERSION_OBJ.osVersion = await response.text();
-            return OS_VERSION_OBJ.osVersion;
-        } else {
-            throw Error(await response.text())
-        }
-    } else {
-        return OS_VERSION_OBJ.osVersion;
-    }
-}
-
-export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
-    let query =
+export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string, rerank: boolean = false) => {
+    let query: any =
     {
         "_source": SOURCES,
         "query": {
@@ -67,13 +48,16 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
             }
         },
         "size": 20,
-        // "ext": {
-        //     "rerank": {
-        //         "query_context": {
-        //             "query_text": rephrasedQuestion
-        //         }
-        //     }
-        // }
+    }
+    if (rerank) {
+        query.ext = {
+            "rerank": {
+                "query_context": {
+                    "query_text": rephrasedQuestion
+                }
+            }
+        }
+
     }
     if (filters != null) {
         console.log("OS setting filters")
@@ -89,19 +73,8 @@ export const hybridSearch = (rephrasedQuestion: string, filters: any, index_name
     return query
 }
 
-export const hybridConversationSearchNoRag = async (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
-    const { osQuery, url } = getHybridSearchNoRagQuery(rephrasedQuestion, filters, index_name, model_id)
-    return openSearchCall(osQuery, url)
-}
-
-export const getHybridSearchNoRagQuery = (rephrasedQuestion: string, filters: any, index_name: string, model_id: string) => {
-    let osQuery = hybridSearch(rephrasedQuestion, filters, index_name, model_id)
-    const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + NO_RAG_SEARCH_PIPELINE
-    return { osQuery, url }
-}
-
-export const getHybridSearchQuery = (question: string, rephrasedQuestion: string, filters: any, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7, rerank: boolean = false) => {
-    let query: any = hybridSearch(rephrasedQuestion, filters, index_name, embeddingModel)
+export const getHybridConversationSearchQuery = (question: string, rephrasedQuestion: string, filters: any, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7, rerank: boolean = false) => {
+    let query: any = hybridSearch(rephrasedQuestion, filters, index_name, embeddingModel, rerank)
     query.ext = {
         "generative_qa_parameters": {
             "llm_question": question,
@@ -109,20 +82,12 @@ export const getHybridSearchQuery = (question: string, rephrasedQuestion: string
             "llm_model": llmModel,
         }
     }
-    if (rerank) {
-        query.ext.generative_qa_parameters["rerank"] = {
-            "query_context": {
-                "query_text": rephrasedQuestion
-            }
-        }
-
-    }
     const url = "/opensearch/" + index_name + "/_search?search_pipeline=" + SEARCH_PIPELINE
     return { query, url }
 }
 
 export const hybridConversationSearch = async (question: string, rephrasedQuestion: string, filters: any, conversationId: string, index_name: string, embeddingModel: string, llmModel: string, numDocs: number = 7) => {
-    const { query, url } = getHybridSearchQuery(question, rephrasedQuestion, filters, index_name, embeddingModel, llmModel, numDocs)
+    const { query, url } = getHybridConversationSearchQuery(question, rephrasedQuestion, filters, index_name, embeddingModel, llmModel, numDocs)
 
     query.ext.generative_qa_parameters.memory_id = conversationId;
 
@@ -150,10 +115,8 @@ export const getEmbeddingModels = async () => {
         "query": {
             "bool": {
                 "must_not": {
-                    "range": {
-                        "chunk_number": {
-                            "gte": 0
-                        }
+                    "exists": {
+                        "field": "chunk_number"
                     }
                 },
                 "must": [

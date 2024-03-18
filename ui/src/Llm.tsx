@@ -40,11 +40,11 @@ export const get_filters_prompt = (text: string) => {
     const openAiPrompt = [{ role: "system", content: sys }, { role: "user", content: prompt }]
     return openAiPrompt;
 }
-export const getFilters = async (question: string, modelName: string) => {
+export const getFilters = async (question: string, modelName: string = "gpt-3.5-turbo-1106") => {
     const prompt = get_filters_prompt(question)
     const chatJson = JSON.stringify({
         stream: false,
-        model: "gpt-3.5-turbo-1106",
+        model: modelName,
         messages: prompt,
         temperature: 0.0,
         response_format: { "type": "json_object" }

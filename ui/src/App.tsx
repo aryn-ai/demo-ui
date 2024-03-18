@@ -44,7 +44,6 @@ export default function App() {
       console.log("Loading convos")
       const interactionsResponse = await getInteractions(settings.activeConversation)
       var previousInteractions = new Array<SystemChat>()
-      // const interactionsData = await interactionsResponse.json();
       let interactionsData = await interactionsResponse;
       if ("hits" in interactionsData) {
         interactionsData = interactionsData.hits.hits
@@ -61,19 +60,11 @@ export default function App() {
             id: interaction_id + "_response",
             response: interaction.response,
             interaction_id: interaction_id,
-            // ragPassageCount: null,
             modelName: null,
             queryUsed: interaction.input,
             feedback: feedback.found ? thumbToBool(feedback._source.thumb) : null,
             comment: feedback.found ? feedback._source.comment : ""
           });
-        // const userChat = new UserChat(
-        //   {
-        //     id: interaction_id + "_user",
-        //     query: interaction.input,
-        //     interaction_id: interaction_id,
-        //     rephrasedQuery: null
-        //   });
         return systemChat;
       }));
       previousInteractionsUnFlattened.forEach((chat) => {
@@ -117,7 +108,6 @@ export default function App() {
                 opened={navBarOpened}
                 onClick={() => setNavBarOpened((o) => !o)}
                 size="xs"
-                // color={theme.colors.gray[6]}
                 maw="1rem"
                 mr="xl"
               />
@@ -144,25 +134,12 @@ export default function App() {
           main: { backgroundColor: "white" },
         })}
       >
-        {/* <Grid mah="100vh"> */}
         <Container>
 
           <ChatBox chatHistory={chatHistory} searchResults={searchResults} setChatHistory={setChatHistory}
             setSearchResults={setSearchResults} streaming={streaming} setStreaming={setStreaming} setDocsLoading={setDocsLoading}
             setErrorMessage={setErrorMessage} settings={settings} setSettings={setSettings} />
         </Container>
-        {/* <Grid.Col span={8} center>
-            <ChatBox chatHistory={chatHistory} searchResults={searchResults} setChatHistory={setChatHistory}
-              setSearchResults={setSearchResults} streaming={streaming} setStreaming={setStreaming} setDocsLoading={setDocsLoading}
-              setErrorMessage={setErrorMessage} settings={settings} setSettings={setSettings} />
-            </Grid.Col> */}
-        {/* <Grid.Col span={2}>
-            <Stack>
-              {errorMessage && <ErrorNotification message={errorMessage} />}
-              <DocList documents={searchResults} settings={settings} docsLoading={docsLoading} />
-            </Stack>
-          </Grid.Col> */}
-        {/* </Grid> */}
 
       </AppShell >
     </MantineProvider >
