@@ -140,6 +140,15 @@ def proxy():
         download_name = download_name
     )
 
+@app.route('/viewHtml/<path:arg>', methods=['GET', 'OPTIONS'])
+def proxy_html(arg):
+    if request.method == 'OPTIONS':
+        return optionsResp('GET')
+    path = "/" + arg
+    if "/../" in path:  # Prevent filesystem snooping
+        return "invalid path"
+    return send_file(path, mimetype='text/html')
+
 def make_openai_call(messages, model_id="gpt-4"):
     response = openai.ChatCompletion.create(
       model=model_id,
